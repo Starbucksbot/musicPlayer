@@ -1,0 +1,27 @@
+.searchContainer {
+    position: relative;
+  }
+  
+  .searchInput {
+    padding: 10px;
+    width: 300px;
+    border: none;
+    outline: none;
+  }
+  
+  .suggestions {
+    position: absolute;
+    top: 40px;
+    left: 0;
+    right: 0;
+    padding: 10px;
+  }
+  
+  .suggestions div {
+    padding: 5px;
+    cursor: pointer;
+  }
+  
+  .suggestions div:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
