@@ -2,8 +2,7 @@
     "apps": [
       {
         "name": "music-app",
-        "script": "npm",
-        "args": "run start",
+        "script": "start.js",
         "env": {
           "NODE_ENV": "production"
         }

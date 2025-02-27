@@ -1,0 +1,14 @@
+{
+    "scripts": {
+      "dev": "next dev",
+      "build": "next build",
+      "start": "node start.js"
+    },
+    "dependencies": {
+      "next": "latest",
+      "react": "latest",
+      "react-dom": "latest",
+      "pm2": "latest",
+      "express": "latest"
+    }
+  }
