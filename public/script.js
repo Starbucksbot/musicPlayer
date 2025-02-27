@@ -1,9 +1,10 @@
 let player;
-let currentVideoId = 'dQw4w9WgXcQ'; // Default video
+let currentVideoId = 'dQw4w9WgXcQ';
 let nextVideoId = null;
 let isPlaying = false;
 let history = { pinned: [], recent: [] };
 let suggestions = [];
+let isSleepMenuOpen = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   // Load YouTube Iframe API
@@ -61,18 +62,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nextButton').addEventListener('click', playNext);
 
   document.getElementById('sleepButton').addEventListener('click', () => {
-    const sleepMenu = document.getElementById('sleepMenu');
-    sleepMenu.style.display = sleepMenu.style.display === 'block' ? 'none' : 'block';
-    if (sleepMenu.innerHTML === '') {
+    const suggestionsPanel = document.getElementById('suggestionsPanel');
+    isSleepMenuOpen = !isSleepMenuOpen;
+    if (isSleepMenuOpen) {
+      suggestionsPanel.innerHTML = ''; // Clear the suggestions panel
+      suggestionsPanel.classList.add('sleep-menu');
       for (let i = 1; i <= 12; i++) {
         const div = document.createElement('div');
         div.textContent = `${i} Hour${i > 1 ? 's' : ''}`;
         div.addEventListener('click', () => {
           setTimeout(() => player.pauseVideo(), i * 3600000);
-          sleepMenu.style.display = 'none';
+          isSleepMenuOpen = false;
+          fetchSuggestions(); // Restore suggestions
         });
-        sleepMenu.appendChild(div);
+        suggestionsPanel.appendChild(div);
       }
+    } else {
+      fetchSuggestions(); // Restore suggestions
     }
   });
 
@@ -87,16 +93,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
     const results = await response.json();
     suggestionsDiv.innerHTML = '';
-    results.forEach((song) => {
+    results.slice(0, 7).forEach((song) => {
       const div = document.createElement('div');
       div.textContent = song.snippet.title;
       div.addEventListener('click', () => {
         playVideo(song.id.videoId);
         document.getElementById('searchInput').value = '';
         suggestionsDiv.innerHTML = '';
+        showPlayerContent();
       });
       suggestionsDiv.appendChild(div);
     });
+  });
+
+  document.getElementById('searchButton').addEventListener('click', async () => {
+    const query = document.getElementById('searchInput').value;
+    if (!query) return;
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    const results = await response.json();
+    const searchResultsDiv = document.getElementById('searchResults');
+    searchResultsDiv.innerHTML = '';
+    results.slice(0, 5).forEach((song) => {
+      const div = document.createElement('div');
+      div.textContent = song.snippet.title;
+      div.addEventListener('click', () => {
+        playVideo(song.id.videoId);
+        document.getElementById('searchInput').value = '';
+        showPlayerContent();
+      });
+      searchResultsDiv.appendChild(div);
+    });
+    document.getElementById('playerContent').style.display = 'none';
+    searchResultsDiv.style.display = 'flex';
   });
 
   // Helper functions
@@ -164,6 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function fetchSuggestions() {
+    if (isSleepMenuOpen) return; // Skip if sleep menu is open
+    const suggestionsPanel = document.getElementById('suggestionsPanel');
+    suggestionsPanel.innerHTML = '<h2>Suggestions</h2><div id="suggestionsList"></div>';
+    suggestionsPanel.classList.remove('sleep-menu');
     const response = await fetch(`/api/related?videoId=${currentVideoId}`);
     suggestions = await response.json();
     const suggestionsList = document.getElementById('suggestionsList');
@@ -192,5 +224,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+
+  function showPlayerContent() {
+    document.getElementById('playerContent').style.display = 'block';
+    document.getElementById('searchResults').style.display = 'none';
   }
 });
