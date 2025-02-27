@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react'; // Must import React
 import styles from '../styles/RightPanel.module.css';
 
 export default function RightPanel({ currentVideoId, setNextVideoId }) {
@@ -6,9 +6,9 @@ export default function RightPanel({ currentVideoId, setNextVideoId }) {
 
   useEffect(() => {
     if (currentVideoId) {
-      fetch(`/api/related?videoId=${currentVideoId}`)
-        .then(res => res.json())
-        .then(data => {
+      fetch(`http://localhost:4300/related?videoId=${currentVideoId}`)
+        .then((res) => res.json())
+        .then((data) => {
           setSuggestions(data);
           setNextVideoId(data[0]?.id.videoId);
         });
@@ -19,7 +19,9 @@ export default function RightPanel({ currentVideoId, setNextVideoId }) {
     <div className={`${styles.panel} glass`}>
       <h2>Suggestions</h2>
       {suggestions.map((song, index) => (
-        <div key={song.id.videoId}>{index === 0 ? 'Next: ' : ''}{song.snippet.title}</div>
+        <div key={song.id.videoId}>
+          {index === 0 ? 'Next: ' : ''}{song.snippet.title}
+        </div>
       ))}
     </div>
   );

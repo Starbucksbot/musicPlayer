@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from 'react'; // Must import React
 import styles from '../styles/SearchBar.module.css';
 
 export default function SearchBar({ setCurrentVideoId }) {
@@ -9,9 +9,9 @@ export default function SearchBar({ setCurrentVideoId }) {
     const value = e.target.value;
     setQuery(value);
     if (value) {
-      fetch(`/api/search?q=${value}`)
-        .then(res => res.json())
-        .then(data => setSuggestions(data.slice(0, 7)));
+      fetch(`http://localhost:4300/search?q=${value}`)
+        .then((res) => res.json())
+        .then((data) => setSuggestions(data.slice(0, 7)));
     } else {
       setSuggestions([]);
     }
@@ -28,7 +28,7 @@ export default function SearchBar({ setCurrentVideoId }) {
       />
       {suggestions.length > 0 && (
         <div className={`${styles.suggestions} glass`}>
-          {suggestions.map(song => (
+          {suggestions.map((song) => (
             <div
               key={song.id.videoId}
               onClick={() => {

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { PlayerProvider } from '../components/PlayerContext'; // Updated import
+import { useState, useEffect } from 'react'; // Ensure React hooks are imported
+import { PlayerProvider } from '../components/PlayerContext';
 import LeftPanel from '../components/LeftPanel';
 import MiddlePanel from '../components/MiddlePanel';
 import RightPanel from '../components/RightPanel';
@@ -13,12 +13,11 @@ export default function Home() {
 
   const playerControls = {
     play: (videoId) => setCurrentVideoId(videoId),
-    pause: () => console.log('Pause'), // Placeholder; enhance with YouTube API later
-    // Add more controls as needed
+    pause: () => console.log('Pause'), // Placeholder
   };
 
   return (
-    <PlayerProvider value={playerControls}> {/* Use PlayerProvider instead of PlayerContext.Provider */}
+    <PlayerProvider value={playerControls}>
       <div className={styles.container}>
         <LeftPanel history={history} setHistory={setHistory} />
         <MiddlePanel currentVideoId={currentVideoId} />

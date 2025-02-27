@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { usePlayer } from './PlayerContext'; // Updated import
+import { useState, useEffect } from 'react'; // Must import React for hooks
+import { usePlayer } from './PlayerContext';
 import styles from '../styles/MiddlePanel.module.css';
 
 export default function MiddlePanel({ currentVideoId }) {
-  const { play, pause } = usePlayer(); // Use custom hook
+  const { play, pause } = usePlayer();
   const [isPlaying, setIsPlaying] = useState(false);
   const [sleepOpen, setSleepOpen] = useState(false);
 
