@@ -1,10 +1,11 @@
 {
     "apps": [
       {
-        "name": "music-app",
-        "script": "start.js",
+        "name": "music-player",
+        "script": "server/server.js",
         "env": {
-          "NODE_ENV": "production"
+          "NODE_ENV": "production",
+          "YOUTUBE_API_KEY": "your-key-here" 
         }
       }
     ]

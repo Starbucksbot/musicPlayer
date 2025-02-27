@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Player</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="overlay"></div>
+  <div class="container">
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search YouTube music...">
+      <div id="searchSuggestions" class="suggestions glass"></div>
+    </div>
+    <div class="panels">
+      <div class="panel glass" id="historyPanel">
+        <h2>History</h2>
+        <div id="historyList"></div>
+      </div>
+      <div class="panel glass middle-panel" id="middlePanel">
+        <img id="albumArt" src="https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg" alt="Album Art">
+        <div class="controls">
+          <button class="button control-button" id="prevButton">Prev</button>
+          <button class="button play-button" id="playButton">Play</button>
+          <button class="button control-button" id="nextButton">Next</button>
+          <button class="button control-button" id="sleepButton">Sleep</button>
+          <div id="sleepMenu" class="sleep-menu glass"></div>
+        </div>
+        <div class="progress-container">
+          <span id="currentTime">0:00</span>
+          <progress id="progressBar" value="0" max="100"></progress>
+          <span id="duration">0:00</span>
+        </div>
+      </div>
+      <div class="panel glass" id="suggestionsPanel">
+        <h2>Suggestions</h2>
+        <div id="suggestionsList"></div>
+      </div>
+    </div>
+  </div>
+  <div id="youtube-player" style="display: none;"></div>
+  <script src="script.js"></script>
+</body>
+</html>
