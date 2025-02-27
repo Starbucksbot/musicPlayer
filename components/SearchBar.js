@@ -1,7 +1,9 @@
-import { useState } from 'react'; // Must import React
+import { useState } from 'react';
+import { usePlayer } from './PlayerContext';
 import styles from '../styles/SearchBar.module.css';
 
-export default function SearchBar({ setCurrentVideoId }) {
+export default function SearchBar() {
+  const { setVideo } = usePlayer();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
 
@@ -11,7 +13,8 @@ export default function SearchBar({ setCurrentVideoId }) {
     if (value) {
       fetch(`http://localhost:4300/search?q=${value}`)
         .then((res) => res.json())
-        .then((data) => setSuggestions(data.slice(0, 7)));
+        .then((data) => setSuggestions(data.slice(0, 7)))
+        .catch((err) => console.error('Failed to fetch search results:', err));
     } else {
       setSuggestions([]);
     }
@@ -32,7 +35,7 @@ export default function SearchBar({ setCurrentVideoId }) {
             <div
               key={song.id.videoId}
               onClick={() => {
-                setCurrentVideoId(song.id.videoId);
+                setVideo(song.id.videoId);
                 setQuery('');
                 setSuggestions([]);
               }}

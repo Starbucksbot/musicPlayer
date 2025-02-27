@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'; // Must import React
+import { useState, useEffect } from 'react';
+import { usePlayer } from './PlayerContext';
 import styles from '../styles/RightPanel.module.css';
 
-export default function RightPanel({ currentVideoId, setNextVideoId }) {
+export default function RightPanel({ setNextVideoId }) {
+  const { currentVideoId } = usePlayer();
   const [suggestions, setSuggestions] = useState([]);
 
   useEffect(() => {
@@ -11,7 +13,8 @@ export default function RightPanel({ currentVideoId, setNextVideoId }) {
         .then((data) => {
           setSuggestions(data);
           setNextVideoId(data[0]?.id.videoId);
-        });
+        })
+        .catch((err) => console.error('Failed to fetch related videos:', err));
     }
   }, [currentVideoId]);
 
