@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, send_from_directory, request
 import os
 import json
-from youtube_search import YoutubeSearch
+from youtube_search_python import YoutubeSearch
 from subprocess import Popen, PIPE
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
