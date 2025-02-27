@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import PlayerContext from '../components/PlayerContext';
+import { PlayerProvider } from '../components/PlayerContext'; // Updated import
 import LeftPanel from '../components/LeftPanel';
 import MiddlePanel from '../components/MiddlePanel';
 import RightPanel from '../components/RightPanel';
@@ -13,18 +13,18 @@ export default function Home() {
 
   const playerControls = {
     play: (videoId) => setCurrentVideoId(videoId),
-    pause: () => console.log('Pause'),
+    pause: () => console.log('Pause'), // Placeholder; enhance with YouTube API later
     // Add more controls as needed
   };
 
   return (
-    <PlayerContext.Provider value={playerControls}>
+    <PlayerProvider value={playerControls}> {/* Use PlayerProvider instead of PlayerContext.Provider */}
       <div className={styles.container}>
         <LeftPanel history={history} setHistory={setHistory} />
         <MiddlePanel currentVideoId={currentVideoId} />
         <RightPanel currentVideoId={currentVideoId} setNextVideoId={setNextVideoId} />
         <SearchBar setCurrentVideoId={setCurrentVideoId} />
       </div>
-    </PlayerContext.Provider>
+    </PlayerProvider>
   );
 }
