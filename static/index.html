@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio 4200</title>
+    <link rel="stylesheet" href="/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="main-container">
+        <div class="sidebar">
+            <h2>Recently Played</h2>
+            <ul id="recent-songs"></ul>
+        </div>
+        <div class="container">
+            <div class="header">
+                <h1>Radio 4200</h1>
+            </div>
+            <div class="now-playing">
+                <img src="/placeholder.jpg" class="album-art">
+                <div class="search-overlay">
+                    <input type="text" id="searchInput" placeholder="Search YouTube...">
+                    <button class="control-btn search-btn" onclick="search()">Search</button>
+                </div>
+                <div class="track-info" id="result"></div>
+            </div>
+            <audio id="player"></audio>
+            <div class="custom-controls">
+                <button class="control-btn" onclick="previousTrack()"><i class="fa fa-step-backward"></i></button>
+                <button class="control-btn play-btn" onclick="togglePlay()"><i class="fa fa-play"></i></button>
+                <button class="control-btn" onclick="nextTrack()"><i class="fa fa-step-forward"></i></button>
+                <div class="progress-bar">
+                    <div class="progress"></div>
+                    <span class="time">0:00 / 3:45</span>
+                </div>
+                <button class="control-btn volume-btn" onclick="toggleVolume()">
+                    <i class="fa fa-volume-up"></i>
+                </button>
+                <div class="volume-slider">
+                    <input type="range" id="volume" min="0" max="1" step="0.01" value="1">
+                </div>
+            </div>
+            <div class="controls">
+                <button class="control-btn sleep-btn" onclick="toggleSleepOptions()">Sleep</button>
+                <div class="sleep-options" id="sleep-options">
+                    <select id="sleep-time">
+                        <option value="1">1 Hour</option>
+                        <option value="2">2 Hours</option>
+                        <option value="3">3 Hours</option>
+                        <option value="4">4 Hours</option>
+                        <option value="5">5 Hours</option>
+                        <option value="6">6 Hours</option>
+                        <option value="7">7 Hours</option>
+                        <option value="8">8 Hours</option>
+                        <option value="9">9 Hours</option>
+                        <option value="10">10 Hours</option>
+                        <option value="11">11 Hours</option>
+                        <option value="12" selected>12 Hours</option>
+                    </select>
+                    <button class="control-btn" onclick="setSleepTimer()">Set</button>
+                </div>
+            </div>
+        </div>
+        <div class="next-sidebar">
+            <h2>Next Track</h2>
+            <div id="next-song"></div>
+        </div>
+    </div>
+    <script src="/client.js"></script>
+</body>
+</html>
