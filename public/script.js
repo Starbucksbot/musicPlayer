@@ -1,5 +1,5 @@
 let player;
-let currentVideoId = 'dQw4w9WgXcQ';
+let currentVideoId = null; // No default song
 let nextVideoId = null;
 let isPlaying = false;
 let history = { pinned: [], recent: [] };
@@ -17,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
     player = new YT.Player('youtube-player', {
       height: '0',
       width: '0',
-      videoId: currentVideoId,
       playerVars: {
         autoplay: 0,
         controls: 0,
@@ -46,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Button event listeners
   document.getElementById('playButton').addEventListener('click', () => {
+    if (!currentVideoId) return; // Do nothing if no video is selected
     if (isPlaying) {
       player.pauseVideo();
     } else {
@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('prevButton').addEventListener('click', () => {
+    if (!currentVideoId) return;
     const recent = history.recent.filter((id) => id !== currentVideoId);
     const prevVideoId = recent[recent.length - 1];
     if (prevVideoId) playVideo(prevVideoId);
@@ -63,51 +64,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('sleepButton').addEventListener('click', () => {
     const suggestionsPanel = document.getElementById('suggestionsPanel');
+    const suggestionsTitle = document.getElementById('suggestionsTitle');
+    const suggestionsList = document.getElementById('suggestionsList');
     isSleepMenuOpen = !isSleepMenuOpen;
     if (isSleepMenuOpen) {
-      suggestionsPanel.innerHTML = ''; // Clear the suggestions panel
-      suggestionsPanel.classList.add('sleep-menu');
+      suggestionsTitle.textContent = 'Sleep Timer';
+      suggestionsList.innerHTML = '';
+      suggestionsList.classList.add('sleep-menu');
       for (let i = 1; i <= 12; i++) {
         const div = document.createElement('div');
         div.textContent = `${i} Hour${i > 1 ? 's' : ''}`;
         div.addEventListener('click', () => {
           setTimeout(() => player.pauseVideo(), i * 3600000);
           isSleepMenuOpen = false;
-          fetchSuggestions(); // Restore suggestions
+          fetchSuggestions();
         });
-        suggestionsPanel.appendChild(div);
+        suggestionsList.appendChild(div);
       }
     } else {
-      fetchSuggestions(); // Restore suggestions
+      suggestionsTitle.textContent = 'Suggestions';
+      fetchSuggestions();
     }
   });
 
   // Search functionality
-  document.getElementById('searchInput').addEventListener('input', async (e) => {
+  const searchInput = document.getElementById('searchInput');
+  const albumArt = document.getElementById('albumArt');
+  const searchSuggestions = document.getElementById('searchSuggestions');
+
+  searchInput.addEventListener('focus', () => {
+    albumArt.style.display = 'none'; // Hide album art when search is focused
+    searchSuggestions.classList.add('expanded'); // Expand suggestions
+  });
+
+  searchInput.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (currentVideoId) {
+        albumArt.style.display = 'block'; // Restore album art if a video is playing
+      }
+      searchSuggestions.classList.remove('expanded'); // Shrink suggestions
+    }, 200); // Delay to allow clicking a suggestion
+  });
+
+  searchInput.addEventListener('input', async (e) => {
     const query = e.target.value;
-    const suggestionsDiv = document.getElementById('searchSuggestions');
     if (!query) {
-      suggestionsDiv.innerHTML = '';
+      searchSuggestions.innerHTML = '';
       return;
     }
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
     const results = await response.json();
-    suggestionsDiv.innerHTML = '';
-    results.slice(0, 7).forEach((song) => {
+    searchSuggestions.innerHTML = '';
+    results.slice(0, 5).forEach((song) => {
       const div = document.createElement('div');
       div.textContent = song.snippet.title;
       div.addEventListener('click', () => {
         playVideo(song.id.videoId);
-        document.getElementById('searchInput').value = '';
-        suggestionsDiv.innerHTML = '';
+        searchInput.value = '';
+        searchSuggestions.innerHTML = '';
         showPlayerContent();
       });
-      suggestionsDiv.appendChild(div);
+      searchSuggestions.appendChild(div);
     });
   });
 
   document.getElementById('searchButton').addEventListener('click', async () => {
-    const query = document.getElementById('searchInput').value;
+    const query = searchInput.value;
     if (!query) return;
     const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
     const results = await response.json();
@@ -118,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
       div.textContent = song.snippet.title;
       div.addEventListener('click', () => {
         playVideo(song.id.videoId);
-        document.getElementById('searchInput').value = '';
+        searchInput.value = '';
         showPlayerContent();
       });
       searchResultsDiv.appendChild(div);
@@ -131,7 +153,9 @@ document.addEventListener('DOMContentLoaded', () => {
   async function playVideo(videoId) {
     currentVideoId = videoId;
     player.loadVideoById(videoId);
-    document.getElementById('albumArt').src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    const albumArt = document.getElementById('albumArt');
+    albumArt.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+    albumArt.style.display = 'block'; // Show album art when a video is playing
     await fetch('/api/play', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -192,13 +216,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function fetchSuggestions() {
-    if (isSleepMenuOpen) return; // Skip if sleep menu is open
-    const suggestionsPanel = document.getElementById('suggestionsPanel');
-    suggestionsPanel.innerHTML = '<h2>Suggestions</h2><div id="suggestionsList"></div>';
-    suggestionsPanel.classList.remove('sleep-menu');
+    if (isSleepMenuOpen) return;
+    const suggestionsTitle = document.getElementById('suggestionsTitle');
+    const suggestionsList = document.getElementById('suggestionsList');
+    suggestionsTitle.textContent = 'Suggestions';
+    suggestionsList.classList.remove('sleep-menu');
     const response = await fetch(`/api/related?videoId=${currentVideoId}`);
     suggestions = await response.json();
-    const suggestionsList = document.getElementById('suggestionsList');
     suggestionsList.innerHTML = '';
     suggestions.forEach((song, index) => {
       const div = document.createElement('div');
@@ -210,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateProgress() {
-    if (player && player.getCurrentTime) {
+    if (player && player.getCurrentTime && isPlaying) {
       const current = player.getCurrentTime();
       const duration = player.getDuration();
       document.getElementById('currentTime').textContent = formatTime(current);
