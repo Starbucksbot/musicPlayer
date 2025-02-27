@@ -1,50 +1,42 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Play, Pause, SkipBack, SkipForward, Clock } from 'lucide-react';
 import axios from 'axios';
 
 export default function Home() {
-  const [history, setHistory] = useState([]);
-  const [currentTrack, setCurrentTrack] = useState(null);
-  const [nextTrack, setNextTrack] = useState(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [currentTrack, setCurrentTrack] = useState<any>(null);
+  const [nextTrack, setNextTrack] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audio] = useState(new Audio());
-  const [sleepTimer, setSleepTimer] = useState(12); // Default 12 hours
+  const [sleepTimer, setSleepTimer] = useState(12);
 
-  // Fetch history on load
   useEffect(() => {
-    axios.get('http://localhost:5000/history').then((res) => setHistory(res.data));
+    axios.get('/api/history').then((res) => setHistory(res.data));
   }, []);
 
-  // Play a track
-  const playTrack = async (videoId, title, artist) => {
-    audio.src = `http://localhost:5000/stream/${videoId}`;
+  const playTrack = async (videoId: string, title: string, artist: string) => {
+    audio.src = `/api/stream/${videoId}`;
     audio.play();
     setIsPlaying(true);
     setCurrentTrack({ videoId, title, artist });
 
-    // Save to history
-    await axios.post('http://localhost:5000/history', { videoId, title, artist });
-    const updatedHistory = await axios.get('http://localhost:5000/history');
+    await axios.post('/api/history', { videoId, title, artist });
+    const updatedHistory = await axios.get('/api/history');
     setHistory(updatedHistory.data);
 
-    // Fetch next recommendation
-    const next = await axios.get(`http://localhost:5000/recommend/${videoId}`);
+    const next = await axios.get(`/api/recommend/${videoId}`);
     setNextTrack(next.data);
   };
 
-  // Search YouTube
   const handleSearch = async () => {
-    const res = await axios.get(`http://localhost:5000/search?q=${searchQuery}`);
+    const res = await axios.get(`/api/search?q=${searchQuery}`);
     setSearchResults(res.data);
   };
 
-  // Playback controls
   const togglePlayPause = () => {
     if (isPlaying) {
       audio.pause();
@@ -68,8 +60,7 @@ export default function Home() {
     }
   };
 
-  // Sleep timer
-  const setTimer = (hours) => {
+  const setTimer = (hours: number) => {
     setSleepTimer(hours);
     setTimeout(() => {
       audio.pause();
@@ -82,7 +73,7 @@ export default function Home() {
       {/* Left Panel: History */}
       <div className="p-4 border-r border-gray-700 overflow-y-auto">
         <h2 className="text-lg font-bold mb-4">Recently Played</h2>
-        {history.map((track, idx) => (
+        {history.map((track: any, idx: number) => (
           <div
             key={idx}
             className="p-2 hover:bg-gray-800 cursor-pointer"
@@ -95,40 +86,53 @@ export default function Home() {
 
       {/* Middle Panel: Current Track */}
       <div className="p-4 flex flex-col items-center justify-center">
-        <Input
+        <input
+          type="text"
           placeholder="Search YouTube..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-          className="mb-4 w-full max-w-md bg-gray-800 text-white border-gray-700"
+          className="mb-4 w-full max-w-md bg-gray-800 text-white border border-gray-700 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         {currentTrack && (
           <>
             <img
               src={`https://img.youtube.com/vi/${currentTrack.videoId}/0.jpg`}
               alt="thumbnail"
-              className="w-64 h-64 mb-4"
+              className="w-64 h-64 mb-4 rounded-lg"
             />
             <h3 className="text-xl font-semibold">{currentTrack.title}</h3>
             <p className="text-gray-400">{currentTrack.artist}</p>
             <div className="flex gap-4 mt-4">
-              <Button variant="ghost" onClick={skipPrevious}>
+              <button
+                onClick={skipPrevious}
+                className="p-2 text-gray-400 hover:text-white"
+              >
                 <SkipBack />
-              </Button>
-              <Button className="rounded-full w-12 h-12" onClick={togglePlayPause}>
+              </button>
+              <button
+                onClick={togglePlayPause}
+                className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white hover:bg-blue-600"
+              >
                 {isPlaying ? <Pause /> : <Play />}
-              </Button>
-              <Button variant="ghost" onClick={skipNext}>
+              </button>
+              <button
+                onClick={skipNext}
+                className="p-2 text-gray-400 hover:text-white"
+              >
                 <SkipForward />
-              </Button>
+              </button>
             </div>
-            <Button variant="outline" className="mt-4" onClick={() => setTimer(sleepTimer)}>
+            <button
+              onClick={() => setTimer(sleepTimer)}
+              className="mt-4 flex items-center gap-2 px-4 py-2 bg-gray-800 border border-gray-700 rounded-md hover:bg-gray-700"
+            >
               <Clock /> Sleep {sleepTimer}h
-            </Button>
+            </button>
             <select
               value={sleepTimer}
               onChange={(e) => setSleepTimer(Number(e.target.value))}
-              className="mt-2 bg-gray-800 border-gray-700"
+              className="mt-2 bg-gray-800 border border-gray-700 rounded-md p-2 text-white focus:outline-none"
             >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
                 <option key={h} value={h}>{h} hour{h > 1 ? 's' : ''}</option>
@@ -136,7 +140,7 @@ export default function Home() {
             </select>
           </>
         )}
-        {searchResults.map((result) => (
+        {searchResults.map((result: any) => (
           <div
             key={result.id.videoId}
             className="p-2 hover:bg-gray-800 cursor-pointer"
@@ -155,11 +159,7 @@ export default function Home() {
             className="p-2 hover:bg-gray-800 cursor-pointer"
             onClick={() => playTrack(nextTrack.id.videoId, nextTrack.snippet.title, nextTrack.snippet.channelTitle)}
           >
-            <img
-              src={nextTrack.snippet.thumbnails.default.url}
-              alt="next thumbnail"
-              className="w-16 h-16 mb-2"
-            />
+            <img src={nextTrack.snippet.thumbnails.default.url} alt="next thumbnail" className="w-16 h-16 mb-2 rounded" />
             {nextTrack.snippet.title} - {nextTrack.snippet.channelTitle}
           </div>
         )}
