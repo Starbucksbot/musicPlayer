@@ -1,12 +1,39 @@
 let player;
-let currentVideoId = null; // No default song
+let currentVideoId = null;
 let nextVideoId = null;
 let isPlaying = false;
 let history = { pinned: [], recent: [] };
 let suggestions = [];
+let queue = [];
 let isSleepMenuOpen = false;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Sync with server state
+  async function syncWithServer() {
+    const response = await fetch('/api/state');
+    const state = await response.json();
+    currentVideoId = state.currentVideoId;
+    isPlaying = state.isPlaying;
+    queue = state.queue;
+    if (currentVideoId) {
+      const albumArt = document.getElementById('albumArt');
+      albumArt.src = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
+      albumArt.style.display = 'block';
+      if (player) {
+        player.loadVideoById(currentVideoId);
+        if (isPlaying) {
+          player.playVideo();
+          document.getElementById('playButton').textContent = 'Pause';
+        } else {
+          player.pauseVideo();
+          document.getElementById('playButton').textContent = 'Play';
+        }
+      }
+    }
+    fetchHistory();
+    fetchSuggestions();
+  }
+
   // Load YouTube Iframe API
   const tag = document.createElement('script');
   tag.src = 'https://www.youtube.com/iframe_api';
@@ -23,18 +50,19 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       events: {
         onReady: (event) => {
+          syncWithServer();
           updateProgress();
-          fetchHistory();
-          fetchSuggestions();
         },
         onStateChange: (event) => {
           if (event.data === YT.PlayerState.PLAYING) {
             isPlaying = true;
             document.getElementById('playButton').textContent = 'Pause';
+            fetch('/api/resume', { method: 'POST' });
             updateProgress();
           } else if (event.data === YT.PlayerState.PAUSED) {
             isPlaying = false;
             document.getElementById('playButton').textContent = 'Play';
+            fetch('/api/pause', { method: 'POST' });
           } else if (event.data === YT.PlayerState.ENDED) {
             playNext();
           }
@@ -43,9 +71,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  // Poll server state for multi-user updates
+  setInterval(syncWithServer, 5000); // Check every 5 seconds
+
   // Button event listeners
   document.getElementById('playButton').addEventListener('click', () => {
-    if (!currentVideoId) return; // Do nothing if no video is selected
+    if (!currentVideoId) return;
     if (isPlaying) {
       player.pauseVideo();
     } else {
@@ -63,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('nextButton').addEventListener('click', playNext);
 
   document.getElementById('sleepButton').addEventListener('click', () => {
-    const suggestionsPanel = document.getElementById('suggestionsPanel');
     const suggestionsTitle = document.getElementById('suggestionsTitle');
     const suggestionsList = document.getElementById('suggestionsList');
     isSleepMenuOpen = !isSleepMenuOpen;
@@ -93,17 +123,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchSuggestions = document.getElementById('searchSuggestions');
 
   searchInput.addEventListener('focus', () => {
-    albumArt.style.display = 'none'; // Hide album art when search is focused
-    searchSuggestions.classList.add('expanded'); // Expand suggestions
+    albumArt.style.display = 'none';
+    searchSuggestions.classList.add('expanded');
   });
 
   searchInput.addEventListener('blur', () => {
     setTimeout(() => {
       if (currentVideoId) {
-        albumArt.style.display = 'block'; // Restore album art if a video is playing
+        albumArt.style.display = 'block';
       }
-      searchSuggestions.classList.remove('expanded'); // Shrink suggestions
-    }, 200); // Delay to allow clicking a suggestion
+      searchSuggestions.classList.remove('expanded');
+    }, 200);
   });
 
   searchInput.addEventListener('input', async (e) => {
@@ -137,12 +167,26 @@ document.addEventListener('DOMContentLoaded', () => {
     searchResultsDiv.innerHTML = '';
     results.slice(0, 5).forEach((song) => {
       const div = document.createElement('div');
-      div.textContent = song.snippet.title;
-      div.addEventListener('click', () => {
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = song.snippet.title;
+      titleSpan.addEventListener('click', () => {
         playVideo(song.id.videoId);
         searchInput.value = '';
         showPlayerContent();
       });
+      const queueButton = document.createElement('button');
+      queueButton.className = 'button queue-button';
+      queueButton.textContent = 'Add to Queue';
+      queueButton.addEventListener('click', async () => {
+        await fetch('/api/add-to-queue', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ videoId: song.id.videoId }),
+        });
+        fetchSuggestions(); // Update queue display
+      });
+      div.appendChild(titleSpan);
+      div.appendChild(queueButton);
       searchResultsDiv.appendChild(div);
     });
     document.getElementById('playerContent').style.display = 'none';
@@ -155,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     player.loadVideoById(videoId);
     const albumArt = document.getElementById('albumArt');
     albumArt.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-    albumArt.style.display = 'block'; // Show album art when a video is playing
+    albumArt.style.display = 'block';
     await fetch('/api/play', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -165,10 +209,9 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchSuggestions();
   }
 
-  function playNext() {
-    if (nextVideoId) {
-      playVideo(nextVideoId);
-    }
+  async function playNext() {
+    await fetch('/api/next', { method: 'POST' });
+    syncWithServer();
   }
 
   async function fetchHistory() {
@@ -221,16 +264,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const suggestionsList = document.getElementById('suggestionsList');
     suggestionsTitle.textContent = 'Suggestions';
     suggestionsList.classList.remove('sleep-menu');
-    const response = await fetch(`/api/related?videoId=${currentVideoId}`);
-    suggestions = await response.json();
+
+    // Combine queue and new suggestions
     suggestionsList.innerHTML = '';
+    const queuedSongs = [];
+    for (const videoId of queue) {
+      const response = await fetch(`/api/video?videoId=${videoId}`);
+      const video = await response.json();
+      queuedSongs.push({ id: { videoId }, snippet: video.snippet });
+    }
+
+    let newSuggestions = [];
+    if (currentVideoId) {
+      const response = await fetch(`/api/related?videoId=${currentVideoId}`);
+      newSuggestions = await response.json();
+    }
+
+    suggestions = [...queuedSongs, ...newSuggestions].slice(0, 10); // Max 10 songs
     suggestions.forEach((song, index) => {
       const div = document.createElement('div');
-      div.textContent = (index === 0 ? 'Next: ' : '') + song.snippet.title;
+      div.textContent = (index < queue.length ? `Queue ${index + 1}: ` : '') + song.snippet.title;
       div.addEventListener('click', () => playVideo(song.id.videoId));
       suggestionsList.appendChild(div);
       if (index === 0) nextVideoId = song.id.videoId;
     });
+
+    // Ensure at least 5 suggestions by fetching more if needed
+    while (suggestions.length < 5 && currentVideoId) {
+      const response = await fetch(`/api/related?videoId=${currentVideoId}`);
+      const moreSuggestions = await response.json();
+      const newItems = moreSuggestions.filter(
+        (item) => !suggestions.some((s) => s.id.videoId === item.id.videoId)
+      );
+      suggestions.push(...newItems.slice(0, 5 - suggestions.length));
+      newItems.slice(0, 5 - suggestions.length).forEach((song, index) => {
+        const div = document.createElement('div');
+        div.textContent = song.snippet.title;
+        div.addEventListener('click', () => playVideo(song.id.videoId));
+        suggestionsList.appendChild(div);
+        if (suggestions.length === 1) nextVideoId = song.id.videoId;
+      });
+    }
   }
 
   function updateProgress() {
@@ -251,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function showPlayerContent() {
-    document.getElementById('playerContent').style.display = 'block';
+    document.getElementById('playerContent').style.display = 'flex';
     document.getElementById('searchResults').style.display = 'none';
   }
 });

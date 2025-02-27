@@ -4,12 +4,25 @@ const path = require('path');
 const fetch = require('node-fetch');
 
 const app = express();
-const port = 4200; // Runs on port 4200 as per requirements
+const port = 4200;
 const historyFile = path.join(__dirname, '..', 'data', 'history.json');
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'YOUR_API_KEY_HERE'; // Add to .env
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+
+// Shared state for multi-user control
+let playerState = {
+  currentVideoId: null,
+  isPlaying: false,
+  queue: [], // Queue to hold up to 10 songs
+};
+
+// Middleware for logging requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public'))); // Serve frontend
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 async function getHistory() {
   try {
@@ -25,6 +38,7 @@ async function saveHistory(history) {
   await fs.writeFile(historyFile, JSON.stringify(history, null, 2));
 }
 
+// API Routes
 app.get('/api/history', async (req, res) => {
   const history = await getHistory();
   res.json(history);
@@ -32,6 +46,9 @@ app.get('/api/history', async (req, res) => {
 
 app.post('/api/play', async (req, res) => {
   const { videoId } = req.body;
+  playerState.currentVideoId = videoId;
+  playerState.isPlaying = true;
+  console.log(`Playing video: ${videoId}`);
   const history = await getHistory();
   if (!history.pinned.includes(videoId)) {
     history.recent.unshift(videoId);
@@ -39,6 +56,18 @@ app.post('/api/play', async (req, res) => {
   }
   await saveHistory(history);
   res.json({ message: 'Song added to history' });
+});
+
+app.post('/api/pause', (req, res) => {
+  playerState.isPlaying = false;
+  console.log('Paused playback');
+  res.json({ message: 'Paused' });
+});
+
+app.post('/api/resume', (req, res) => {
+  playerState.isPlaying = true;
+  console.log('Resumed playback');
+  res.json({ message: 'Resumed' });
 });
 
 app.post('/api/pin', async (req, res) => {
@@ -87,6 +116,36 @@ app.get('/api/video', async (req, res) => {
   );
   const data = await response.json();
   res.json(data.items[0] || {});
+});
+
+// Shared state endpoints
+app.get('/api/state', (req, res) => {
+  res.json(playerState);
+});
+
+app.post('/api/add-to-queue', (req, res) => {
+  const { videoId } = req.body;
+  if (playerState.queue.length < 10) {
+    playerState.queue.push(videoId);
+    console.log(`Added to queue: ${videoId}`);
+    res.json({ message: 'Added to queue' });
+  } else {
+    res.status(400).json({ error: 'Queue is full (max 10 songs)' });
+  }
+});
+
+app.post('/api/next', (req, res) => {
+  const nextVideoId = playerState.queue.shift();
+  if (nextVideoId) {
+    playerState.currentVideoId = nextVideoId;
+    playerState.isPlaying = true;
+    console.log(`Playing next in queue: ${nextVideoId}`);
+  } else {
+    playerState.currentVideoId = null;
+    playerState.isPlaying = false;
+    console.log('Queue is empty');
+  }
+  res.json({ message: 'Moved to next song' });
 });
 
 app.listen(port, () => {

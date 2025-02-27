@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Music Player</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ff4081'><path d='M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm-1-11v8l5-4-5-4z'/></svg>" type="image/svg+xml">
 </head>
 <body>
   <div class="overlay"></div>
@@ -24,19 +25,22 @@
       <div class="panel glass middle-panel" id="middlePanel">
         <div id="playerContent">
           <img id="albumArt" alt="Album Art" style="display: none;">
-          <div class="controls">
-            <button class="button control-button" id="prevButton">Prev</button>
-            <button class="button play-button" id="playButton">Play</button>
-            <button class="button control-button" id="nextButton">Next</button>
-            <button class="button control-button" id="sleepButton">Sleep</button>
-          </div>
-          <div class="progress-container">
-            <span id="currentTime">0:00</span>
-            <progress id="progressBar" value="0" max="100"></progress>
-            <span id="duration">0:00</span>
+          <div class="spacer"></div>
+          <div class="controls-container">
+            <div class="controls">
+              <button class="button control-button" id="prevButton">Prev</button>
+              <button class="button play-button" id="playButton">Play</button>
+              <button class="button control-button" id="nextButton">Next</button>
+              <button class="button control-button" id="sleepButton">Sleep</button>
+            </div>
+            <div class="progress-container">
+              <span id="currentTime">0:00</span>
+              <progress id="progressBar" value="0" max="100"></progress>
+              <span id="duration">0:00</span>
+            </div>
           </div>
         </div>
-        <div id="searchResults" class="search-results" style="display: none;"></div>
+        <div id="searchResults" class="search-results"></div>
       </div>
       <div class="panel glass" id="suggestionsPanel">
         <h2 id="suggestionsTitle">Suggestions</h2>
