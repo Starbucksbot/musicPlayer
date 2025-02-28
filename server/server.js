@@ -43,14 +43,18 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 async function getHistory() {
-  try {
-    const data = await fs.readFile(historyFile, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    return { pinned: [], recent: [] };
+    try {
+      const data = await fs.readFile(historyFile, 'utf8');
+      const history = JSON.parse(data);
+      return {
+        pinned: Array.isArray(history.pinned) ? history.pinned.filter(item => item && typeof item === 'object' && item.id) : [],
+        recent: Array.isArray(history.recent) ? history.recent.filter(item => item && typeof item === 'object' && item.id) : [],
+      };
+    } catch (err) {
+      console.error('Error reading history file:', err.message);
+      return { pinned: [], recent: [] };
+    }
   }
-}
-
 async function saveHistory(history) {
   await fs.mkdir(path.dirname(historyFile), { recursive: true });
   await fs.writeFile(historyFile, JSON.stringify(history, null, 2));
@@ -82,24 +86,25 @@ app.get('/api/history', async (req, res) => {
 });
 
 app.post('/api/play', async (req, res) => {
-  const { videoId, title } = req.body;
-  playerState.currentVideoId = videoId;
-  playerState.isPlaying = true;
-  console.log(`Playing audio: ${videoId} - ${title}`);
-  const history = await getHistory();
-  const exists = history.pinned.some((item) => item.id === videoId) || history.recent.some((item) => item.id === videoId);
-  if (!exists) {
-    history.recent.unshift({ id: videoId, title });
-    history.recent = history.recent.slice(0, 30);
-  } else {
-    // Move to top if already exists
-    history.recent = history.recent.filter((item) => item.id !== videoId);
-    history.recent.unshift({ id: videoId, title });
-  }
-  await saveHistory(history);
-  res.json({ message: 'Song added to history' });
-});
-
+    const { videoId, title } = req.body;
+    playerState.currentVideoId = videoId;
+    playerState.isPlaying = true;
+    console.log(`Playing audio: ${videoId} - ${title}`);
+    const history = await getHistory();
+    // Ensure pinned and recent are arrays and filter out invalid entries
+    history.pinned = Array.isArray(history.pinned) ? history.pinned.filter(item => item && typeof item === 'object' && item.id) : [];
+    history.recent = Array.isArray(history.recent) ? history.recent.filter(item => item && typeof item === 'object' && item.id) : [];
+    const exists = history.pinned.some((item) => item.id === videoId) || history.recent.some((item) => item.id === videoId);
+    if (!exists) {
+      history.recent.unshift({ id: videoId, title });
+      history.recent = history.recent.slice(0, 30);
+    } else {
+      history.recent = history.recent.filter((item) => item.id !== videoId);
+      history.recent.unshift({ id: videoId, title });
+    }
+    await saveHistory(history);
+    res.json({ message: 'Song added to history' });
+  });
 app.post('/api/pause', (req, res) => {
   playerState.isPlaying = false;
   console.log('Paused playback');
@@ -113,30 +118,33 @@ app.post('/api/resume', (req, res) => {
 });
 
 app.post('/api/pin', async (req, res) => {
-  const { videoId } = req.body;
-  const history = await getHistory();
-  const video = history.recent.find((item) => item.id === videoId) || history.pinned.find((item) => item.id === videoId);
-  if (video && !history.pinned.some((item) => item.id === videoId) && history.pinned.length < 5) {
-    history.pinned.unshift({ id: videoId, title: video.title });
-    history.recent = history.recent.filter((item) => item.id !== videoId);
-  }
-  await saveHistory(history);
-  res.json({ message: 'Song pinned' });
-});
-
-app.post('/api/unpin', async (req, res) => {
-  const { videoId } = req.body;
-  const history = await getHistory();
-  const video = history.pinned.find((item) => item.id === videoId);
-  if (video) {
-    history.pinned = history.pinned.filter((item) => item.id !== videoId);
-    history.recent.unshift({ id: videoId, title: video.title });
-    history.recent = history.recent.slice(0, 30);
-  }
-  await saveHistory(history);
-  res.json({ message: 'Song unpinned' });
-});
-
+    const { videoId } = req.body;
+    const history = await getHistory();
+    history.pinned = Array.isArray(history.pinned) ? history.pinned.filter(item => item && typeof item === 'object' && item.id) : [];
+    history.recent = Array.isArray(history.recent) ? history.recent.filter(item => item && typeof item === 'object' && item.id) : [];
+    const video = history.recent.find((item) => item.id === videoId) || history.pinned.find((item) => item.id === videoId);
+    if (video && !history.pinned.some((item) => item.id === videoId) && history.pinned.length < 5) {
+      history.pinned.unshift({ id: videoId, title: video.title });
+      history.recent = history.recent.filter((item) => item.id !== videoId);
+    }
+    await saveHistory(history);
+    res.json({ message: 'Song pinned' });
+  });
+  
+  app.post('/api/unpin', async (req, res) => {
+    const { videoId } = req.body;
+    const history = await getHistory();
+    history.pinned = Array.isArray(history.pinned) ? history.pinned.filter(item => item && typeof item === 'object' && item.id) : [];
+    history.recent = Array.isArray(history.recent) ? history.recent.filter(item => item && typeof item === 'object' && item.id) : [];
+    const video = history.pinned.find((item) => item.id === videoId);
+    if (video) {
+      history.pinned = history.pinned.filter((item) => item.id !== videoId);
+      history.recent.unshift({ id: videoId, title: video.title });
+      history.recent = history.recent.slice(0, 30);
+    }
+    await saveHistory(history);
+    res.json({ message: 'Song unpinned' });
+  });
 app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Query parameter is required' });
@@ -311,32 +319,33 @@ app.get('/api/state', (req, res) => {
 });
 
 app.post('/api/add-to-queue', async (req, res) => {
-  const { videoId, title } = req.body;
-  if (playerState.queue.length < 10) {
-    playerState.queue.push({ id: videoId, title });
+    const { videoId, title } = req.body;
+    playerState.queue = Array.isArray(playerState.queue) ? playerState.queue.filter(item => item && typeof item === 'object' && item.id) : [];
+    if (playerState.queue.length < 10) {
+      playerState.queue.push({ id: videoId, title });
+      await saveQueue(playerState.queue);
+      console.log(`Added to queue: ${videoId} - ${title}`);
+      res.json({ message: 'Added to queue' });
+    } else {
+      res.status(400).json({ error: 'Queue is full (max 10 songs)' });
+    }
+  });
+  
+  app.post('/api/next', async (req, res) => {
+    playerState.queue = Array.isArray(playerState.queue) ? playerState.queue.filter(item => item && typeof item === 'object' && item.id) : [];
+    const nextItem = playerState.queue.shift();
     await saveQueue(playerState.queue);
-    console.log(`Added to queue: ${videoId} - ${title}`);
-    res.json({ message: 'Added to queue' });
-  } else {
-    res.status(400).json({ error: 'Queue is full (max 10 songs)' });
-  }
-});
-
-app.post('/api/next', async (req, res) => {
-  const nextItem = playerState.queue.shift();
-  await saveQueue(playerState.queue);
-  if (nextItem) {
-    playerState.currentVideoId = nextItem.id;
-    playerState.isPlaying = true;
-    console.log(`Playing next in queue: ${nextItem.id} - ${nextItem.title}`);
-  } else {
-    playerState.currentVideoId = null;
-    playerState.isPlaying = false;
-    console.log('Queue is empty');
-  }
-  res.json({ message: 'Moved to next song' });
-});
-
+    if (nextItem) {
+      playerState.currentVideoId = nextItem.id;
+      playerState.isPlaying = true;
+      console.log(`Playing next in queue: ${nextItem.id} - ${nextItem.title}`);
+    } else {
+      playerState.currentVideoId = null;
+      playerState.isPlaying = false;
+      console.log('Queue is empty');
+    }
+    res.json({ message: 'Moved to next song' });
+  });
 // Audio streaming endpoint using yt-dlp
 app.get('/api/audio', async (req, res) => {
   const { videoId } = req.query;
