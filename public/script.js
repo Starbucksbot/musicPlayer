@@ -158,41 +158,84 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  document.getElementById('searchButton').addEventListener('click', async () => {
+  // Inside the search button event listener
+document.getElementById('searchButton').addEventListener('click', async () => {
     const query = searchInput.value;
     if (!query) return;
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    const results = await response.json();
-    const searchResultsDiv = document.getElementById('searchResults');
-    searchResultsDiv.innerHTML = '';
-    results.slice(0, 5).forEach((song) => {
-      const div = document.createElement('div');
-      const titleSpan = document.createElement('span');
-      titleSpan.textContent = song.snippet.title;
-      titleSpan.addEventListener('click', () => {
-        playVideo(song.id.videoId);
-        searchInput.value = '';
-        showPlayerContent();
-      });
-      const queueButton = document.createElement('button');
-      queueButton.className = 'button queue-button';
-      queueButton.textContent = 'Add to Queue';
-      queueButton.addEventListener('click', async () => {
-        await fetch('/api/add-to-queue', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: song.id.videoId }),
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const results = await response.json();
+      if (results.error) {
+        console.error('Search failed:', results.error);
+        alert('Failed to fetch search results: ' + (results.details?.message || 'Unknown error'));
+        return;
+      }
+      const searchResultsDiv = document.getElementById('searchResults');
+      searchResultsDiv.innerHTML = '';
+      results.slice(0, 5).forEach((song) => {
+        const div = document.createElement('div');
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = song.snippet.title;
+        titleSpan.addEventListener('click', () => {
+          playVideo(song.id.videoId);
+          searchInput.value = '';
+          showPlayerContent();
         });
-        fetchSuggestions(); // Update queue display
+        const queueButton = document.createElement('button');
+        queueButton.className = 'button queue-button';
+        queueButton.textContent = 'Add to Queue';
+        queueButton.addEventListener('click', async () => {
+          await fetch('/api/add-to-queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId: song.id.videoId }),
+          });
+          fetchSuggestions();
+        });
+        div.appendChild(titleSpan);
+        div.appendChild(queueButton);
+        searchResultsDiv.appendChild(div);
       });
-      div.appendChild(titleSpan);
-      div.appendChild(queueButton);
-      searchResultsDiv.appendChild(div);
-    });
-    document.getElementById('playerContent').style.display = 'none';
-    searchResultsDiv.style.display = 'flex';
+      document.getElementById('playerContent').style.display = 'none';
+      searchResultsDiv.style.display = 'flex';
+    } catch (err) {
+      console.error('Error during search:', err.message);
+      alert('An error occurred while searching: ' + err.message);
+    }
   });
-
+  
+  // Update the search suggestions (input event)
+  searchInput.addEventListener('input', async (e) => {
+    const query = e.target.value;
+    if (!query) {
+      searchSuggestions.innerHTML = '';
+      return;
+    }
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const results = await response.json();
+      if (results.error) {
+        console.error('Search suggestions failed:', results.error);
+        searchSuggestions.innerHTML = '<div>Error fetching suggestions</div>';
+        return;
+      }
+      searchSuggestions.innerHTML = '';
+      results.slice(0, 5).forEach((song) => {
+        const div = document.createElement('div');
+        div.textContent = song.snippet.title;
+        div.addEventListener('click', () => {
+          playVideo(song.id.videoId);
+          searchInput.value = '';
+          searchSuggestions.innerHTML = '';
+          showPlayerContent();
+        });
+        searchSuggestions.appendChild(div);
+      });
+    } catch (err) {
+      console.error('Error fetching search suggestions:', err.message);
+      searchSuggestions.innerHTML = '<div>Error fetching suggestions</div>';
+    }
+  });
   // Helper functions
   async function playVideo(videoId) {
     currentVideoId = videoId;
@@ -222,65 +265,89 @@ document.addEventListener('DOMContentLoaded', async () => {
     historyList.innerHTML = '';
     const allVideos = [...history.pinned, ...history.recent];
     for (const videoId of allVideos) {
-      const response = await fetch(`/api/video?videoId=${videoId}`);
-      const video = await response.json();
-      const title = video.snippet?.title || videoId;
-      const div = document.createElement('div');
-      const span = document.createElement('span');
-      span.textContent = title;
-      span.addEventListener('click', () => playVideo(videoId));
-      const button = document.createElement('button');
-      button.className = 'button';
-      if (history.pinned.includes(videoId)) {
-        button.textContent = 'Unpin';
-        button.addEventListener('click', async () => {
-          await fetch('/api/unpin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoId }),
+      try {
+        const response = await fetch(`/api/video?videoId=${videoId}`);
+        const video = await response.json();
+        if (video.error) {
+          console.error(`Failed to fetch video details for ${videoId}:`, video.error);
+          continue; // Skip this video
+        }
+        const title = video.snippet?.title || videoId;
+        const div = document.createElement('div');
+        const span = document.createElement('span');
+        span.textContent = title;
+        span.addEventListener('click', () => playVideo(videoId));
+        const button = document.createElement('button');
+        button.className = 'button';
+        if (history.pinned.includes(videoId)) {
+          button.textContent = 'Unpin';
+          button.addEventListener('click', async () => {
+            await fetch('/api/unpin', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ videoId }),
+            });
+            fetchHistory();
           });
-          fetchHistory();
-        });
-      } else {
-        button.textContent = 'Pin';
-        button.addEventListener('click', async () => {
-          await fetch('/api/pin', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoId }),
+        } else {
+          button.textContent = 'Pin';
+          button.addEventListener('click', async () => {
+            await fetch('/api/pin', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ videoId }),
+            });
+            fetchHistory();
           });
-          fetchHistory();
-        });
+        }
+        div.appendChild(span);
+        div.appendChild(button);
+        historyList.appendChild(div);
+      } catch (err) {
+        console.error(`Error fetching history video ${videoId}:`, err.message);
       }
-      div.appendChild(span);
-      div.appendChild(button);
-      historyList.appendChild(div);
     }
   }
-
+  
   async function fetchSuggestions() {
     if (isSleepMenuOpen) return;
     const suggestionsTitle = document.getElementById('suggestionsTitle');
     const suggestionsList = document.getElementById('suggestionsList');
     suggestionsTitle.textContent = 'Suggestions';
     suggestionsList.classList.remove('sleep-menu');
-
-    // Combine queue and new suggestions
+  
     suggestionsList.innerHTML = '';
     const queuedSongs = [];
     for (const videoId of queue) {
-      const response = await fetch(`/api/video?videoId=${videoId}`);
-      const video = await response.json();
-      queuedSongs.push({ id: { videoId }, snippet: video.snippet });
+      try {
+        const response = await fetch(`/api/video?videoId=${videoId}`);
+        const video = await response.json();
+        if (video.error) {
+          console.error(`Failed to fetch queued video ${videoId}:`, video.error);
+          continue;
+        }
+        queuedSongs.push({ id: { videoId }, snippet: video.snippet });
+      } catch (err) {
+        console.error(`Error fetching queued video ${videoId}:`, err.message);
+      }
     }
-
+  
     let newSuggestions = [];
     if (currentVideoId) {
-      const response = await fetch(`/api/related?videoId=${currentVideoId}`);
-      newSuggestions = await response.json();
+      try {
+        const response = await fetch(`/api/related?videoId=${currentVideoId}`);
+        const data = await response.json();
+        if (data.error) {
+          console.error(`Failed to fetch related videos for ${currentVideoId}:`, data.error);
+        } else {
+          newSuggestions = data;
+        }
+      } catch (err) {
+        console.error(`Error fetching related videos for ${currentVideoId}:`, err.message);
+      }
     }
-
-    suggestions = [...queuedSongs, ...newSuggestions].slice(0, 10); // Max 10 songs
+  
+    suggestions = [...queuedSongs, ...newSuggestions].slice(0, 10);
     suggestions.forEach((song, index) => {
       const div = document.createElement('div');
       div.textContent = (index < queue.length ? `Queue ${index + 1}: ` : '') + song.snippet.title;
@@ -288,25 +355,32 @@ document.addEventListener('DOMContentLoaded', async () => {
       suggestionsList.appendChild(div);
       if (index === 0) nextVideoId = song.id.videoId;
     });
-
-    // Ensure at least 5 suggestions by fetching more if needed
+  
     while (suggestions.length < 5 && currentVideoId) {
-      const response = await fetch(`/api/related?videoId=${currentVideoId}`);
-      const moreSuggestions = await response.json();
-      const newItems = moreSuggestions.filter(
-        (item) => !suggestions.some((s) => s.id.videoId === item.id.videoId)
-      );
-      suggestions.push(...newItems.slice(0, 5 - suggestions.length));
-      newItems.slice(0, 5 - suggestions.length).forEach((song, index) => {
-        const div = document.createElement('div');
-        div.textContent = song.snippet.title;
-        div.addEventListener('click', () => playVideo(song.id.videoId));
-        suggestionsList.appendChild(div);
-        if (suggestions.length === 1) nextVideoId = song.id.videoId;
-      });
+      try {
+        const response = await fetch(`/api/related?videoId=${currentVideoId}`);
+        const moreSuggestions = await response.json();
+        if (moreSuggestions.error) {
+          console.error(`Failed to fetch more suggestions for ${currentVideoId}:`, moreSuggestions.error);
+          break;
+        }
+        const newItems = moreSuggestions.filter(
+          (item) => !suggestions.some((s) => s.id.videoId === item.id.videoId)
+        );
+        suggestions.push(...newItems.slice(0, 5 - suggestions.length));
+        newItems.slice(0, 5 - suggestions.length).forEach((song, index) => {
+          const div = document.createElement('div');
+          div.textContent = song.snippet.title;
+          div.addEventListener('click', () => playVideo(song.id.videoId));
+          suggestionsList.appendChild(div);
+          if (suggestions.length === 1) nextVideoId = song.id.videoId;
+        });
+      } catch (err) {
+        console.error(`Error fetching more suggestions for ${currentVideoId}:`, err.message);
+        break;
+      }
     }
   }
-
   function updateProgress() {
     if (player && player.getCurrentTime && isPlaying) {
       const current = player.getCurrentTime();
