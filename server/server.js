@@ -89,34 +89,61 @@ app.post('/api/unpin', async (req, res) => {
 });
 
 app.get('/api/search', async (req, res) => {
-  const { q } = req.query;
-  if (!q) return res.status(400).json({ error: 'Query parameter is required' });
-  const response = await fetch(
-    `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(q)}&key=${YOUTUBE_API_KEY}`
-  );
-  const data = await response.json();
-  res.json(data.items || []);
-});
+    const { q } = req.query;
+    if (!q) return res.status(400).json({ error: 'Query parameter is required' });
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(q)}&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.error) {
+        console.error(`YouTube API error for search query "${q}":`, data.error);
+        return res.status(500).json({ error: 'Failed to fetch search results', details: data.error });
+      }
+      res.json(data.items || []);
+    } catch (err) {
+      console.error(`Error fetching search results for query "${q}":`, err.message);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  });
 
-app.get('/api/related', async (req, res) => {
-  const { videoId } = req.query;
-  if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
-  const response = await fetch(
-    `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&relatedToVideoId=${videoId}&key=${YOUTUBE_API_KEY}`
-  );
-  const data = await response.json();
-  res.json(data.items || []);
-});
+  app.get('/api/related', async (req, res) => {
+    const { videoId } = req.query;
+    if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&relatedToVideoId=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.error) {
+        console.error(`YouTube API error for related videos (videoId: ${videoId}):`, data.error);
+        return res.status(500).json({ error: 'Failed to fetch related videos', details: data.error });
+      }
+      res.json(data.items || []);
+    } catch (err) {
+      console.error(`Error fetching related videos for videoId ${videoId}:`, err.message);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  });
 
 app.get('/api/video', async (req, res) => {
-  const { videoId } = req.query;
-  if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
-  const response = await fetch(
-    `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-  );
-  const data = await response.json();
-  res.json(data.items[0] || {});
-});
+    const { videoId } = req.query;
+    if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.error) {
+        console.error(`YouTube API error for videoId ${videoId}:`, data.error);
+        return res.status(500).json({ error: 'Failed to fetch video details', details: data.error });
+      }
+      res.json(data.items && data.items[0] ? data.items[0] : {});
+    } catch (err) {
+      console.error(`Error fetching video details for videoId ${videoId}:`, err.message);
+      res.status(500).json({ error: 'Internal server error', details: err.message });
+    }
+  });
 
 // Shared state endpoints
 app.get('/api/state', (req, res) => {
