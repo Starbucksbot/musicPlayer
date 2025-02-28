@@ -1,4 +1,4 @@
-let player;
+let audioPlayer;
 let currentVideoId = null;
 let nextVideoId = null;
 let isPlaying = false;
@@ -8,6 +8,8 @@ let queue = [];
 let isSleepMenuOpen = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
+  audioPlayer = document.getElementById('audioPlayer');
+
   // Sync with server state
   async function syncWithServer() {
     const response = await fetch('/api/state');
@@ -19,68 +21,43 @@ document.addEventListener('DOMContentLoaded', async () => {
       const albumArt = document.getElementById('albumArt');
       albumArt.src = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
       albumArt.style.display = 'block';
-      if (player) {
-        player.loadVideoById(currentVideoId);
-        if (isPlaying) {
-          player.playVideo();
-          document.getElementById('playButton').textContent = 'Pause';
-        } else {
-          player.pauseVideo();
-          document.getElementById('playButton').textContent = 'Play';
-        }
+      audioPlayer.src = `/api/audio?videoId=${currentVideoId}`;
+      if (isPlaying) {
+        audioPlayer.play();
+        document.getElementById('playButton').textContent = 'Pause';
+      } else {
+        audioPlayer.pause();
+        document.getElementById('playButton').textContent = 'Play';
       }
     }
     fetchHistory();
     fetchSuggestions();
   }
 
-  // Load YouTube Iframe API
-  const tag = document.createElement('script');
-  tag.src = 'https://www.youtube.com/iframe_api';
-  const firstScriptTag = document.getElementsByTagName('script')[0];
-  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-  window.onYouTubeIframeAPIReady = () => {
-    player = new YT.Player('youtube-player', {
-      height: '0',
-      width: '0',
-      playerVars: {
-        autoplay: 0,
-        controls: 0,
-      },
-      events: {
-        onReady: (event) => {
-          syncWithServer();
-          updateProgress();
-        },
-        onStateChange: (event) => {
-          if (event.data === YT.PlayerState.PLAYING) {
-            isPlaying = true;
-            document.getElementById('playButton').textContent = 'Pause';
-            fetch('/api/resume', { method: 'POST' });
-            updateProgress();
-          } else if (event.data === YT.PlayerState.PAUSED) {
-            isPlaying = false;
-            document.getElementById('playButton').textContent = 'Play';
-            fetch('/api/pause', { method: 'POST' });
-          } else if (event.data === YT.PlayerState.ENDED) {
-            playNext();
-          }
-        },
-      },
-    });
-  };
-
   // Poll server state for multi-user updates
-  setInterval(syncWithServer, 5000); // Check every 5 seconds
+  setInterval(syncWithServer, 5000);
+
+  // Audio player events
+  audioPlayer.addEventListener('timeupdate', updateProgress);
+  audioPlayer.addEventListener('ended', playNext);
+  audioPlayer.addEventListener('play', () => {
+    isPlaying = true;
+    document.getElementById('playButton').textContent = 'Pause';
+    fetch('/api/resume', { method: 'POST' });
+  });
+  audioPlayer.addEventListener('pause', () => {
+    isPlaying = false;
+    document.getElementById('playButton').textContent = 'Play';
+    fetch('/api/pause', { method: 'POST' });
+  });
 
   // Button event listeners
   document.getElementById('playButton').addEventListener('click', () => {
     if (!currentVideoId) return;
     if (isPlaying) {
-      player.pauseVideo();
+      audioPlayer.pause();
     } else {
-      player.playVideo();
+      audioPlayer.play();
     }
   });
 
@@ -88,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentVideoId) return;
     const recent = history.recent.filter((id) => id !== currentVideoId);
     const prevVideoId = recent[recent.length - 1];
-    if (prevVideoId) playVideo(prevVideoId);
+    if (prevVideoId) playAudio(prevVideoId);
   });
 
   document.getElementById('nextButton').addEventListener('click', playNext);
@@ -105,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const div = document.createElement('div');
         div.textContent = `${i} Hour${i > 1 ? 's' : ''}`;
         div.addEventListener('click', () => {
-          setTimeout(() => player.pauseVideo(), i * 3600000);
+          setTimeout(() => audioPlayer.pause(), i * 3600000);
           isSleepMenuOpen = false;
           fetchSuggestions();
         });
@@ -142,24 +119,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       searchSuggestions.innerHTML = '';
       return;
     }
-    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    const results = await response.json();
-    searchSuggestions.innerHTML = '';
-    results.slice(0, 5).forEach((song) => {
-      const div = document.createElement('div');
-      div.textContent = song.snippet.title;
-      div.addEventListener('click', () => {
-        playVideo(song.id.videoId);
-        searchInput.value = '';
-        searchSuggestions.innerHTML = '';
-        showPlayerContent();
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const results = await response.json();
+      if (results.error) {
+        console.error('Search suggestions failed:', results.error);
+        searchSuggestions.innerHTML = '<div>Error fetching suggestions</div>';
+        return;
+      }
+      searchSuggestions.innerHTML = '';
+      results.slice(0, 5).forEach((song) => {
+        const div = document.createElement('div');
+        div.textContent = song.snippet.title;
+        div.addEventListener('click', () => {
+          playAudio(song.id.videoId);
+          searchInput.value = '';
+          searchSuggestions.innerHTML = '';
+          showPlayerContent();
+        });
+        searchSuggestions.appendChild(div);
       });
-      searchSuggestions.appendChild(div);
-    });
+    } catch (err) {
+      console.error('Error fetching search suggestions:', err.message);
+      searchSuggestions.innerHTML = '<div>Error fetching suggestions</div>';
+    }
   });
 
-  // Inside the search button event listener
-document.getElementById('searchButton').addEventListener('click', async () => {
+  document.getElementById('searchButton').addEventListener('click', async () => {
     const query = searchInput.value;
     if (!query) return;
     try {
@@ -177,7 +163,7 @@ document.getElementById('searchButton').addEventListener('click', async () => {
         const titleSpan = document.createElement('span');
         titleSpan.textContent = song.snippet.title;
         titleSpan.addEventListener('click', () => {
-          playVideo(song.id.videoId);
+          playAudio(song.id.videoId);
           searchInput.value = '';
           showPlayerContent();
         });
@@ -203,43 +189,12 @@ document.getElementById('searchButton').addEventListener('click', async () => {
       alert('An error occurred while searching: ' + err.message);
     }
   });
-  
-  // Update the search suggestions (input event)
-  searchInput.addEventListener('input', async (e) => {
-    const query = e.target.value;
-    if (!query) {
-      searchSuggestions.innerHTML = '';
-      return;
-    }
-    try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-      const results = await response.json();
-      if (results.error) {
-        console.error('Search suggestions failed:', results.error);
-        searchSuggestions.innerHTML = '<div>Error fetching suggestions</div>';
-        return;
-      }
-      searchSuggestions.innerHTML = '';
-      results.slice(0, 5).forEach((song) => {
-        const div = document.createElement('div');
-        div.textContent = song.snippet.title;
-        div.addEventListener('click', () => {
-          playVideo(song.id.videoId);
-          searchInput.value = '';
-          searchSuggestions.innerHTML = '';
-          showPlayerContent();
-        });
-        searchSuggestions.appendChild(div);
-      });
-    } catch (err) {
-      console.error('Error fetching search suggestions:', err.message);
-      searchSuggestions.innerHTML = '<div>Error fetching suggestions</div>';
-    }
-  });
+
   // Helper functions
-  async function playVideo(videoId) {
+  async function playAudio(videoId) {
     currentVideoId = videoId;
-    player.loadVideoById(videoId);
+    audioPlayer.src = `/api/audio?videoId=${videoId}`;
+    audioPlayer.play();
     const albumArt = document.getElementById('albumArt');
     albumArt.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     albumArt.style.display = 'block';
@@ -270,13 +225,13 @@ document.getElementById('searchButton').addEventListener('click', async () => {
         const video = await response.json();
         if (video.error) {
           console.error(`Failed to fetch video details for ${videoId}:`, video.error);
-          continue; // Skip this video
+          continue;
         }
         const title = video.snippet?.title || videoId;
         const div = document.createElement('div');
         const span = document.createElement('span');
         span.textContent = title;
-        span.addEventListener('click', () => playVideo(videoId));
+        span.addEventListener('click', () => playAudio(videoId));
         const button = document.createElement('button');
         button.className = 'button';
         if (history.pinned.includes(videoId)) {
@@ -308,14 +263,14 @@ document.getElementById('searchButton').addEventListener('click', async () => {
       }
     }
   }
-  
+
   async function fetchSuggestions() {
     if (isSleepMenuOpen) return;
     const suggestionsTitle = document.getElementById('suggestionsTitle');
     const suggestionsList = document.getElementById('suggestionsList');
     suggestionsTitle.textContent = 'Suggestions';
     suggestionsList.classList.remove('sleep-menu');
-  
+
     suggestionsList.innerHTML = '';
     const queuedSongs = [];
     for (const videoId of queue) {
@@ -331,7 +286,7 @@ document.getElementById('searchButton').addEventListener('click', async () => {
         console.error(`Error fetching queued video ${videoId}:`, err.message);
       }
     }
-  
+
     let newSuggestions = [];
     if (currentVideoId) {
       try {
@@ -346,16 +301,16 @@ document.getElementById('searchButton').addEventListener('click', async () => {
         console.error(`Error fetching related videos for ${currentVideoId}:`, err.message);
       }
     }
-  
+
     suggestions = [...queuedSongs, ...newSuggestions].slice(0, 10);
     suggestions.forEach((song, index) => {
       const div = document.createElement('div');
       div.textContent = (index < queue.length ? `Queue ${index + 1}: ` : '') + song.snippet.title;
-      div.addEventListener('click', () => playVideo(song.id.videoId));
+      div.addEventListener('click', () => playAudio(song.id.videoId));
       suggestionsList.appendChild(div);
       if (index === 0) nextVideoId = song.id.videoId;
     });
-  
+
     while (suggestions.length < 5 && currentVideoId) {
       try {
         const response = await fetch(`/api/related?videoId=${currentVideoId}`);
@@ -371,7 +326,7 @@ document.getElementById('searchButton').addEventListener('click', async () => {
         newItems.slice(0, 5 - suggestions.length).forEach((song, index) => {
           const div = document.createElement('div');
           div.textContent = song.snippet.title;
-          div.addEventListener('click', () => playVideo(song.id.videoId));
+          div.addEventListener('click', () => playAudio(song.id.videoId));
           suggestionsList.appendChild(div);
           if (suggestions.length === 1) nextVideoId = song.id.videoId;
         });
@@ -381,14 +336,15 @@ document.getElementById('searchButton').addEventListener('click', async () => {
       }
     }
   }
+
   function updateProgress() {
-    if (player && player.getCurrentTime && isPlaying) {
-      const current = player.getCurrentTime();
-      const duration = player.getDuration();
+    if (audioPlayer && isPlaying) {
+      const current = audioPlayer.currentTime;
+      const duration = audioPlayer.duration || 0;
       document.getElementById('currentTime').textContent = formatTime(current);
       document.getElementById('duration').textContent = formatTime(duration);
-      document.getElementById('progressBar').value = (current / duration) * 100 || 0;
-      if (isPlaying) setTimeout(updateProgress, 1000);
+      document.getElementById('progressBar').value = duration ? (current / duration) * 100 : 0;
+      setTimeout(updateProgress, 1000);
     }
   }
 
