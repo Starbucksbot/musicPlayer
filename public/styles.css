@@ -66,10 +66,9 @@
   }
   
   #searchButton {
-    padding: 10px 20px;
+    padding: 10px;
     font-size: 16px;
     font-weight: bold;
-    text-transform: uppercase;
     color: #ff4081;
     background: linear-gradient(145deg, #1a1a1a, #2c2c2c);
     border: 1px solid #ff4081;
@@ -94,11 +93,10 @@
   }
   
   #stopButton {
-    padding: 10px 20px;
+    padding: 10px;
     font-size: 16px;
     font-weight: bold;
-    text-transform: uppercase;
-    color: #ff4444; /* Red to indicate stop */
+    color: #ff4444;
     background: linear-gradient(145deg, #1a1a1a, #2c2c2c);
     border: 1px solid #ff4444;
     border-radius: 25px;
@@ -119,6 +117,23 @@
   #stopButton:active {
     transform: scale(0.95);
     box-shadow: 0 0 5px rgba(255, 68, 68, 0.2);
+  }
+  
+  .button-icon {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .play-button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+  }
+  
+  .control-button {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
   }
   
   .suggestions {
@@ -218,6 +233,12 @@
     margin-bottom: 10px;
   }
   
+  .countdown {
+    font-size: 14px;
+    margin-left: 10px;
+    color: #ff4081;
+  }
+  
   .button {
     position: relative;
     overflow: hidden;
@@ -245,20 +266,6 @@
   
   .button:active {
     transform: scale(0.95);
-  }
-  
-  .play-button {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    font-size: 20px;
-  }
-  
-  .control-button {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    font-size: 16px;
   }
   
   .sleep-menu div {
@@ -323,6 +330,23 @@
   #progressBar::-webkit-progress-value {
     background: #ff4081;
     border-radius: 4px;
+  }
+  
+  #loadingBar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #555;
+  }
+  
+  #loadingBar::-webkit-progress-bar {
+    background: #555;
+    border-radius: 2px;
+  }
+  
+  #loadingBar::-webkit-progress-value {
+    background: #ff4081;
+    border-radius: 2px;
   }
   
   #historyList div, #queueList div {

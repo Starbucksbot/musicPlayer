@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Music Player</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ff4081'><path d='M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm-1-11v8l5-4-5-4z'/></svg>" type="image/svg+xml">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ff4081'><path d='M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14-7-7 7zm-1-11v8l5-4-5-4z'/></svg>" type="image/svg+xml">
 </head>
 <body>
   <div class="overlay"></div>
@@ -13,8 +13,16 @@
     <div class="search-bar">
       <div class="search-wrapper">
         <input type="text" id="searchInput" placeholder="Search YouTube music...">
-        <button id="searchButton" class="button">Search</button>
-        <button id="stopButton" class="button stop-button">Stop</button>
+        <button id="searchButton" class="button">
+          <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </button>
+        <button id="stopButton" class="button stop-button">
+          <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6h12v12H6z"/>
+          </svg>
+        </button>
       </div>
       <div id="searchSuggestions" class="suggestions glass"></div>
     </div>
@@ -31,16 +39,37 @@
           </div>
           <div class="controls-container">
             <div class="controls">
-              <button class="button control-button" id="prevButton">Prev</button>
-              <button class="button play-button" id="playButton">Play</button>
-              <button class="button control-button" id="nextButton">Next</button>
-              <button class="button control-button" id="sleepButton">Sleep</button>
+              <button class="button control-button" id="prevButton">
+                <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
+                </svg>
+              </button>
+              <button class="button play-button" id="playButton">
+                <svg class="button-icon play-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                <svg class="button-icon pause-icon" style="display: none;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              </button>
+              <button class="button control-button" id="nextButton">
+                <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+                </svg>
+              </button>
+              <button class="button control-button" id="sleepButton">
+                <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 9.557a3 3 0 1 0-2-5.523L12 17.11V4h-2v15h2v-2.057l6-13.02a3 3 0 0 0 2 5.634z"/>
+                </svg>
+              </button>
+              <span id="sleepCountdown" class="countdown"></span>
             </div>
             <div class="progress-container">
               <span id="currentTime">0:00</span>
               <progress id="progressBar" value="0" max="100"></progress>
               <span id="duration">0:00</span>
             </div>
+            <progress id="loadingBar" value="0" max="100" style="display: none;"></progress>
           </div>
         </div>
       </div>

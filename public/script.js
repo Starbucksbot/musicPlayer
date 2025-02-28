@@ -8,6 +8,7 @@ let isSleepMenuOpen = false;
 const MAX_RETRIES = 3;
 let lastSearchTime = null;
 let sleepTimerId = null;
+let sleepEndTime = null;
 let continuousPlayStartTime = null;
 const MAX_CONTINUOUS_PLAY_TIME = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
 let abortController = null;
@@ -32,13 +33,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         audioPlayer.src = `/api/audio?videoId=${currentVideoId}`;
         if (isPlaying) {
           audioPlayer.play();
-          document.getElementById('playButton').textContent = 'Pause';
+          document.querySelector('.play-icon').style.display = 'none';
+          document.querySelector('.pause-icon').style.display = 'block';
           if (!continuousPlayStartTime) {
             continuousPlayStartTime = Date.now();
           }
         } else {
           audioPlayer.pause();
-          document.getElementById('playButton').textContent = 'Play';
+          document.querySelector('.play-icon').style.display = 'block';
+          document.querySelector('.pause-icon').style.display = 'none';
         }
       }
       fetchHistory();
@@ -56,17 +59,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   audioPlayer.addEventListener('ended', playNext);
   audioPlayer.addEventListener('play', () => {
     isPlaying = true;
-    document.getElementById('playButton').textContent = 'Pause';
+    document.querySelector('.play-icon').style.display = 'none';
+    document.querySelector('.pause-icon').style.display = 'block';
     fetch('/api/resume', { method: 'POST' });
     if (!continuousPlayStartTime) {
       continuousPlayStartTime = Date.now();
     }
     checkContinuousPlayLimit();
+    document.getElementById('loadingBar').style.display = 'none';
   });
   audioPlayer.addEventListener('pause', () => {
     isPlaying = false;
-    document.getElementById('playButton').textContent = 'Play';
+    document.querySelector('.play-icon').style.display = 'block';
+    document.querySelector('.pause-icon').style.display = 'none';
     fetch('/api/pause', { method: 'POST' });
+  });
+  audioPlayer.addEventListener('loadstart', () => {
+    document.getElementById('loadingBar').style.display = 'block';
+    document.getElementById('loadingBar').value = 0;
+  });
+  audioPlayer.addEventListener('progress', () => {
+    if (audioPlayer.buffered.length > 0) {
+      const buffered = audioPlayer.buffered.end(0);
+      const duration = audioPlayer.duration || 100;
+      const bufferPercent = (buffered / duration) * 100;
+      document.getElementById('loadingBar').value = bufferPercent;
+      if (bufferPercent >= 10) { // Approximate first 10 seconds
+        document.getElementById('loadingBar').style.display = 'none';
+      }
+    }
   });
 
   // Button event listeners
@@ -106,11 +127,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         div.addEventListener('click', () => {
           if (sleepTimerId) {
             clearTimeout(sleepTimerId);
+            clearInterval(countdownInterval);
           }
+          const sleepTime = hour * 60 * 60 * 1000;
+          sleepEndTime = Date.now() + sleepTime;
           sleepTimerId = setTimeout(() => {
             audioPlayer.pause();
             sleepTimerId = null;
-          }, hour * 60 * 60 * 1000);
+            sleepEndTime = null;
+            document.getElementById('sleepCountdown').textContent = '';
+            clearInterval(countdownInterval);
+          }, sleepTime);
+          if (hour !== 12) { // Exclude 12-hour timer from countdown
+            countdownInterval = setInterval(updateSleepCountdown, 1000);
+          }
           isSleepMenuOpen = false;
           fetchQueue();
         });
@@ -152,6 +182,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         albumArt.style.display = 'block';
       }
       searchSuggestions.classList.remove('expanded');
+      searchSuggestions.style.display = 'none';
     }, 200);
   });
 
@@ -161,6 +192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       searchSuggestions.innerHTML = '';
       return;
     }
+    searchSuggestions.style.display = 'block';
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
@@ -186,7 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             div.addEventListener('click', () => {
               playAudio(song.id.videoId, song.snippet.title);
               searchInput.value = '';
-              searchSuggestions.innerHTML = '';
+              searchSuggestions.style.display = 'none';
               showPlayerContent();
             });
             searchSuggestions.appendChild(div);
@@ -233,6 +265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           titleSpan.addEventListener('click', () => {
             playAudio(song.id.videoId, song.snippet.title);
             searchInput.value = '';
+            searchResultsDiv.style.display = 'none';
             showPlayerContent();
           });
           const queueButton = document.createElement('button');
@@ -286,7 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function playNext() {
     await fetch('/api/next', { method: 'POST' });
     syncWithServer();
-    fetchQueue(); // Ensure queue is updated after playing next
+    fetchQueue();
   }
 
   async function fetchHistory() {
@@ -357,7 +390,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             break;
           }
           if (related.length > 0) {
-            const suggestion = related[0]; // Take the first related video
+            const suggestion = related[0];
             await fetch('/api/add-to-queue', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -417,4 +450,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     setTimeout(checkContinuousPlayLimit, 60000);
   }
+
+  function updateSleepCountdown() {
+    if (!sleepEndTime) return;
+    const remainingTime = Math.max(0, sleepEndTime - Date.now());
+    const hours = Math.floor(remainingTime / (60 * 60 * 1000));
+    const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((remainingTime % (60 * 1000)) / 1000);
+    document.getElementById('sleepCountdown').textContent = `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  let countdownInterval = null;
 });
