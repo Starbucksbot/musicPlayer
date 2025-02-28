@@ -7,6 +7,10 @@ let suggestions = [];
 let queue = [];
 let isSleepMenuOpen = false;
 const MAX_RETRIES = 3;
+let lastSearchTime = null; // Track the last search time
+let sleepTimerId = null; // Track the sleep timer
+let continuousPlayStartTime = null; // Track continuous play start time
+const MAX_CONTINUOUS_PLAY_TIME = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
 
 document.addEventListener('DOMContentLoaded', async () => {
   audioPlayer = document.getElementById('audioPlayer');
@@ -26,6 +30,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (isPlaying) {
         audioPlayer.play();
         document.getElementById('playButton').textContent = 'Pause';
+        if (!continuousPlayStartTime) {
+          continuousPlayStartTime = Date.now();
+        }
       } else {
         audioPlayer.pause();
         document.getElementById('playButton').textContent = 'Play';
@@ -45,6 +52,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     isPlaying = true;
     document.getElementById('playButton').textContent = 'Pause';
     fetch('/api/resume', { method: 'POST' });
+    if (!continuousPlayStartTime) {
+      continuousPlayStartTime = Date.now();
+    }
+    checkContinuousPlayLimit();
   });
   audioPlayer.addEventListener('pause', () => {
     isPlaying = false;
@@ -79,16 +90,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       suggestionsTitle.textContent = 'Sleep Timer';
       suggestionsList.innerHTML = '';
       suggestionsList.classList.add('sleep-menu');
-      for (let i = 1; i <= 12; i++) {
+      const hours = [1, 2, 3, 4, 5, 6, 12];
+      hours.forEach((hour) => {
         const div = document.createElement('div');
-        div.textContent = `${i} Hour${i > 1 ? 's' : ''}`;
+        div.textContent = `${hour} Hour${hour !== 1 ? 's' : ''}`;
+        if (hour === 12) {
+          div.classList.add('default'); // Highlight default option
+        }
         div.addEventListener('click', () => {
-          setTimeout(() => audioPlayer.pause(), i * 3600000);
+          if (sleepTimerId) {
+            clearTimeout(sleepTimerId); // Clear existing timer
+          }
+          sleepTimerId = setTimeout(() => {
+            audioPlayer.pause();
+            sleepTimerId = null;
+          }, hour * 60 * 60 * 1000); // Convert hours to milliseconds
           isSleepMenuOpen = false;
           fetchSuggestions();
         });
         suggestionsList.appendChild(div);
-      }
+      });
     } else {
       suggestionsTitle.textContent = 'Suggestions';
       fetchSuggestions();
@@ -120,6 +141,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       searchSuggestions.innerHTML = '';
       return;
     }
+    lastSearchTime = Date.now(); // Update last search time
     let retries = 0;
     while (retries < MAX_RETRIES) {
       try {
@@ -156,6 +178,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('searchButton').addEventListener('click', async () => {
     const query = searchInput.value;
     if (!query) return;
+    lastSearchTime = Date.now(); // Update last search time
     let retries = 0;
     while (retries < MAX_RETRIES) {
       try {
@@ -379,7 +402,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }
       }
-      break; // Avoid infinite loop if related videos fail
+      break;
     }
   }
 
@@ -402,5 +425,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function showPlayerContent() {
     document.getElementById('searchResults').style.display = 'none';
+  }
+
+  function checkContinuousPlayLimit() {
+    if (!isPlaying || !continuousPlayStartTime) return;
+    const elapsed = Date.now() - continuousPlayStartTime;
+    if (elapsed >= MAX_CONTINUOUS_PLAY_TIME) {
+      const timeSinceLastSearch = lastSearchTime ? Date.now() - lastSearchTime : Infinity;
+      if (timeSinceLastSearch > MAX_CONTINUOUS_PLAY_TIME) {
+        audioPlayer.pause();
+        continuousPlayStartTime = null;
+        console.log('Stopped playback after 12 hours of continuous play without new search');
+        return;
+      }
+    }
+    setTimeout(checkContinuousPlayLimit, 60000); // Check every minute
   }
 });

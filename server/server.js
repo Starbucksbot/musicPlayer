@@ -2,8 +2,12 @@ const express = require('express');
 const fs = require('fs').promises;
 const path = require('path');
 const fetch = require('node-fetch');
-const ytdl = require('ytdl-core'); // For audio streaming
-const puppeteer = require('puppeteer');
+const { exec } = require('child_process');
+const util = require('util');
+
+// Promisify exec for async/await
+const execPromise = util.promisify(exec);
+
 const app = express();
 const port = 4200;
 const historyFile = path.join(__dirname, '..', 'data', 'history.json');
@@ -19,11 +23,11 @@ let playerState = {
 // Quota tracking
 let quotaExceeded = false;
 let lastQuotaErrorTime = null;
-const QUOTA_RESET_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds (YouTube quota resets daily)
+const QUOTA_RESET_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const MAX_RETRIES = 3; // Retry limit for API calls
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  // Check if quota exceeded and reset after 24 hours
   if (quotaExceeded && lastQuotaErrorTime && Date.now() - lastQuotaErrorTime > QUOTA_RESET_INTERVAL) {
     console.log('Resetting quota exceeded flag after 24 hours');
     quotaExceeded = false;
@@ -103,10 +107,9 @@ app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Query parameter is required' });
   if (quotaExceeded) {
-    console.log('Quota exceeded, falling back to alternative search method');
-    // Fallback to web scraping or alternative API (implemented below)
+    console.log('Quota exceeded, falling back to yt-dlp for search');
     try {
-      const results = await fallbackSearch(q);
+      const results = await searchWithYtDlp(q);
       res.json(results);
     } catch (err) {
       console.error(`Fallback search failed for query "${q}":`, err.message);
@@ -114,29 +117,42 @@ app.get('/api/search', async (req, res) => {
     }
     return;
   }
-  try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(q)}&key=${YOUTUBE_API_KEY}`
-    );
-    const data = await response.json();
-    if (data.error) {
-      console.error(`YouTube API error for search query "${q}":`, data.error);
-      if (data.error.code === 403 && data.error.errors[0]?.reason === 'quotaExceeded') {
-        quotaExceeded = true;
-        lastQuotaErrorTime = Date.now();
-        console.log('Quota exceeded, stopping YouTube API calls');
-        // Fallback to alternative method
-        const results = await fallbackSearch(q);
-        res.json(results);
-      } else {
-        res.status(500).json({ error: 'Failed to fetch search results', details: data.error });
+  let retries = 0;
+  while (retries < MAX_RETRIES) {
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(q)}&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.error) {
+        console.error(`YouTube API error for search query "${q}":`, data.error);
+        if (data.error.code === 403 && data.error.errors[0]?.reason === 'quotaExceeded') {
+          quotaExceeded = true;
+          lastQuotaErrorTime = Date.now();
+          console.log('Quota exceeded, stopping YouTube API calls');
+          const results = await searchWithYtDlp(q);
+          res.json(results);
+        } else {
+          res.status(500).json({ error: 'Failed to fetch search results', details: data.error });
+        }
+        return;
       }
+      res.json(data.items || []);
       return;
+    } catch (err) {
+      retries++;
+      console.error(`Error fetching search results for query "${q}" (attempt ${retries}/${MAX_RETRIES}):`, err.message);
+      if (retries === MAX_RETRIES) {
+        console.log('Max retries reached, falling back to yt-dlp');
+        try {
+          const results = await searchWithYtDlp(q);
+          res.json(results);
+        } catch (fallbackErr) {
+          console.error(`Fallback search failed for query "${q}":`, fallbackErr.message);
+          res.status(500).json({ error: 'Internal server error', details: fallbackErr.message });
+        }
+      }
     }
-    res.json(data.items || []);
-  } catch (err) {
-    console.error(`Error fetching search results for query "${q}":`, err.message);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
@@ -145,30 +161,38 @@ app.get('/api/related', async (req, res) => {
   if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
   if (quotaExceeded) {
     console.log('Quota exceeded, skipping related videos fetch');
-    res.json([]); // Return empty array to prevent client errors
+    res.json([]);
     return;
   }
-  try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&relatedToVideoId=${videoId}&key=${YOUTUBE_API_KEY}`
-    );
-    const data = await response.json();
-    if (data.error) {
-      console.error(`YouTube API error for related videos (videoId: ${videoId}):`, data.error);
-      if (data.error.code === 403 && data.error.errors[0]?.reason === 'quotaExceeded') {
-        quotaExceeded = true;
-        lastQuotaErrorTime = Date.now();
-        console.log('Quota exceeded, stopping YouTube API calls');
-        res.json([]);
-      } else {
-        res.status(500).json({ error: 'Failed to fetch related videos', details: data.error });
+  let retries = 0;
+  while (retries < MAX_RETRIES) {
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&relatedToVideoId=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.error) {
+        console.error(`YouTube API error for related videos (videoId: ${videoId}):`, data.error);
+        if (data.error.code === 403 && data.error.errors[0]?.reason === 'quotaExceeded') {
+          quotaExceeded = true;
+          lastQuotaErrorTime = Date.now();
+          console.log('Quota exceeded, stopping YouTube API calls');
+          res.json([]);
+        } else {
+          res.status(500).json({ error: 'Failed to fetch related videos', details: data.error });
+        }
+        return;
       }
+      res.json(data.items || []);
       return;
+    } catch (err) {
+      retries++;
+      console.error(`Error fetching related videos for videoId ${videoId} (attempt ${retries}/${MAX_RETRIES}):`, err.message);
+      if (retries === MAX_RETRIES) {
+        console.log('Max retries reached, returning empty results');
+        res.json([]);
+      }
     }
-    res.json(data.items || []);
-  } catch (err) {
-    console.error(`Error fetching related videos for videoId ${videoId}:`, err.message);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
@@ -176,48 +200,52 @@ app.get('/api/video', async (req, res) => {
   const { videoId } = req.query;
   if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
   if (quotaExceeded) {
-    console.log('Quota exceeded, falling back to alternative metadata fetch');
+    console.log('Quota exceeded, falling back to yt-dlp for metadata');
     try {
-      const info = await ytdl.getInfo(videoId);
-      res.json({
-        id: videoId,
-        snippet: {
-          title: info.videoDetails.title,
-        },
-      });
+      const metadata = await metadataWithYtDlp(videoId);
+      res.json(metadata);
     } catch (err) {
       console.error(`Fallback metadata fetch failed for videoId ${videoId}:`, err.message);
       res.status(500).json({ error: 'Fallback metadata fetch failed', details: err.message });
     }
     return;
   }
-  try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-    );
-    const data = await response.json();
-    if (data.error) {
-      console.error(`YouTube API error for videoId ${videoId}:`, data.error);
-      if (data.error.code === 403 && data.error.errors[0]?.reason === 'quotaExceeded') {
-        quotaExceeded = true;
-        lastQuotaErrorTime = Date.now();
-        console.log('Quota exceeded, stopping YouTube API calls');
-        const info = await ytdl.getInfo(videoId);
-        res.json({
-          id: videoId,
-          snippet: {
-            title: info.videoDetails.title,
-          },
-        });
-      } else {
-        res.status(500).json({ error: 'Failed to fetch video details', details: data.error });
+  let retries = 0;
+  while (retries < MAX_RETRIES) {
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+      const data = await response.json();
+      if (data.error) {
+        console.error(`YouTube API error for videoId ${videoId}:`, data.error);
+        if (data.error.code === 403 && data.error.errors[0]?.reason === 'quotaExceeded') {
+          quotaExceeded = true;
+          lastQuotaErrorTime = Date.now();
+          console.log('Quota exceeded, stopping YouTube API calls');
+          const metadata = await metadataWithYtDlp(videoId);
+          res.json(metadata);
+        } else {
+          res.status(500).json({ error: 'Failed to fetch video details', details: data.error });
+        }
+        return;
       }
+      res.json(data.items && data.items[0] ? data.items[0] : {});
       return;
+    } catch (err) {
+      retries++;
+      console.error(`Error fetching video details for videoId ${videoId} (attempt ${retries}/${MAX_RETRIES}):`, err.message);
+      if (retries === MAX_RETRIES) {
+        console.log('Max retries reached, falling back to yt-dlp');
+        try {
+          const metadata = await metadataWithYtDlp(videoId);
+          res.json(metadata);
+        } catch (fallbackErr) {
+          console.error(`Fallback metadata fetch failed for videoId ${videoId}:`, fallbackErr.message);
+          res.status(500).json({ error: 'Internal server error', details: fallbackErr.message });
+        }
+      }
     }
-    res.json(data.items && data.items[0] ? data.items[0] : {});
-  } catch (err) {
-    console.error(`Error fetching video details for videoId ${videoId}:`, err.message);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
@@ -251,54 +279,75 @@ app.post('/api/next', (req, res) => {
   res.json({ message: 'Moved to next song' });
 });
 
-// Audio streaming endpoint using ytdl-core
-app.get('/api/audio', (req, res) => {
+// Audio streaming endpoint using yt-dlp
+app.get('/api/audio', async (req, res) => {
   const { videoId } = req.query;
   if (!videoId) return res.status(400).json({ error: 'videoId parameter is required' });
   try {
-    const stream = ytdl(videoId, { filter: 'audioonly', quality: 'highestaudio' });
-    res.setHeader('Content-Type', 'audio/mpeg');
-    stream.pipe(res);
-    stream.on('error', (err) => {
-      console.error(`Error streaming audio for videoId ${videoId}:`, err.message);
-      res.status(500).json({ error: 'Failed to stream audio', details: err.message });
-    });
+    const { stdout, stderr } = await execPromise(
+      `yt-dlp -f bestaudio --get-url "https://www.youtube.com/watch?v=${videoId}"`
+    );
+    if (stderr) {
+      console.error(`yt-dlp stderr for videoId ${videoId}:`, stderr);
+      throw new Error(stderr);
+    }
+    const audioUrl = stdout.trim();
+    res.redirect(audioUrl);
   } catch (err) {
-    console.error(`Error initiating audio stream for videoId ${videoId}:`, err.message);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
+    console.error(`Error streaming audio for videoId ${videoId}:`, err.message);
+    res.status(500).json({ error: 'Failed to stream audio', details: err.message });
   }
 });
 
-async function fallbackSearch(query) {
-    console.log(`Performing fallback search for query: ${query}`);
-    try {
-      const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-      const page = await browser.newPage();
-      await page.goto(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, {
-        waitUntil: 'networkidle2',
-      });
-  
-      // Scrape video IDs and titles
-      const results = await page.evaluate(() => {
-        const videos = Array.from(document.querySelectorAll('ytd-video-renderer'));
-        return videos.slice(0, 5).map((video) => {
-          const titleElement = video.querySelector('#video-title');
-          const videoId = video.querySelector('a#thumbnail')?.href?.match(/v=([^&]+)/)?.[1];
-          return {
-            id: { videoId },
-            snippet: { title: titleElement?.textContent?.trim() || 'Unknown Title' },
-          };
-        }).filter((video) => video.id.videoId);
-      });
-  
-      await browser.close();
-      console.log(`Fallback search found ${results.length} results for query: ${query}`);
-      return results;
-    } catch (err) {
-      console.error(`Fallback search failed for query "${query}":`, err.message);
-      return [];
+// Fallback search using yt-dlp
+async function searchWithYtDlp(query) {
+  console.log(`Performing yt-dlp search for query: ${query}`);
+  try {
+    const { stdout, stderr } = await execPromise(
+      `yt-dlp "ytsearch5:${query}" --dump-json --flat-playlist`
+    );
+    if (stderr) {
+      console.error(`yt-dlp stderr for search query "${query}":`, stderr);
+      throw new Error(stderr);
     }
+    const results = stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .map((item) => ({
+        id: { videoId: item.id },
+        snippet: { title: item.title },
+      }));
+    console.log(`yt-dlp search found ${results.length} results for query: ${query}`);
+    return results;
+  } catch (err) {
+    console.error(`yt-dlp search failed for query "${query}":`, err.message);
+    return [];
   }
+}
+
+// Fallback metadata fetch using yt-dlp
+async function metadataWithYtDlp(videoId) {
+  console.log(`Fetching metadata with yt-dlp for videoId: ${videoId}`);
+  try {
+    const { stdout, stderr } = await execPromise(
+      `yt-dlp "https://www.youtube.com/watch?v=${videoId}" --dump-json`
+    );
+    if (stderr) {
+      console.error(`yt-dlp stderr for videoId ${videoId}:`, stderr);
+      throw new Error(stderr);
+    }
+    const data = JSON.parse(stdout);
+    return {
+      id: { videoId },
+      snippet: { title: data.title || 'Unknown Title' },
+    };
+  } catch (err) {
+    console.error(`yt-dlp metadata fetch failed for videoId ${videoId}:`, err.message);
+    return { id: { videoId }, snippet: { title: 'Unknown Title' } };
+  }
+}
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
