@@ -13,6 +13,7 @@ let continuousPlayStartTime = null;
 const MAX_CONTINUOUS_PLAY_TIME = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
 let abortController = null;
 let searchTimeout = null;
+let isLoading = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   audioPlayer = document.getElementById('audioPlayer');
@@ -29,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (currentVideoId) {
         const albumArt = document.getElementById('albumArt');
         albumArt.src = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
-        albumArt.style.display = 'block';
+        albumArt.style.display = isPlaying ? 'block' : 'none';
         audioPlayer.src = `/api/audio?videoId=${currentVideoId}`;
         if (isPlaying) {
           audioPlayer.play();
@@ -61,30 +62,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     isPlaying = true;
     document.querySelector('.play-icon').style.display = 'none';
     document.querySelector('.pause-icon').style.display = 'block';
+    document.getElementById('albumArt').style.display = 'block';
     fetch('/api/resume', { method: 'POST' });
     if (!continuousPlayStartTime) {
       continuousPlayStartTime = Date.now();
     }
     checkContinuousPlayLimit();
+    document.getElementById('loadingCircle').style.display = 'none';
     document.getElementById('loadingBar').style.display = 'none';
+    isLoading = false;
   });
   audioPlayer.addEventListener('pause', () => {
     isPlaying = false;
     document.querySelector('.play-icon').style.display = 'block';
     document.querySelector('.pause-icon').style.display = 'none';
+    document.getElementById('albumArt').style.display = 'none';
     fetch('/api/pause', { method: 'POST' });
   });
   audioPlayer.addEventListener('loadstart', () => {
+    if (!isLoading) return;
+    document.getElementById('loadingCircle').style.display = 'block';
     document.getElementById('loadingBar').style.display = 'block';
     document.getElementById('loadingBar').value = 0;
   });
   audioPlayer.addEventListener('progress', () => {
+    if (!isLoading) return;
     if (audioPlayer.buffered.length > 0) {
       const buffered = audioPlayer.buffered.end(0);
       const duration = audioPlayer.duration || 100;
       const bufferPercent = (buffered / duration) * 100;
       document.getElementById('loadingBar').value = bufferPercent;
-      if (bufferPercent >= 10) { // Approximate first 10 seconds
+      if (buffered >= 1) { // First second loaded
+        document.getElementById('loadingCircle').style.display = 'none';
+      }
+      if (bufferPercent >= 10) {
         document.getElementById('loadingBar').style.display = 'none';
       }
     }
@@ -96,6 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isPlaying) {
       audioPlayer.pause();
     } else {
+      isLoading = true;
       audioPlayer.play();
     }
   });
@@ -104,7 +116,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentVideoId) return;
     const recent = history.recent.filter((item) => item.id !== currentVideoId);
     const prevItem = recent[recent.length - 1];
-    if (prevItem) playAudio(prevItem.id, prevItem.title);
+    if (prevItem) {
+      isLoading = true;
+      playAudio(prevItem.id, prevItem.title);
+    }
   });
 
   document.getElementById('nextButton').addEventListener('click', playNext);
@@ -138,7 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('sleepCountdown').textContent = '';
             clearInterval(countdownInterval);
           }, sleepTime);
-          if (hour !== 12) { // Exclude 12-hour timer from countdown
+          if (hour !== 12) {
             countdownInterval = setInterval(updateSleepCountdown, 1000);
           }
           isSleepMenuOpen = false;
@@ -163,6 +178,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const searchSuggestions = document.getElementById('searchSuggestions');
     searchSuggestions.innerHTML = '<div>Requests stopped</div>';
+    searchSuggestions.style.display = 'none';
     console.log('Stopped all ongoing requests and searches');
   });
 
@@ -178,7 +194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   searchInput.addEventListener('blur', () => {
     setTimeout(() => {
-      if (currentVideoId) {
+      if (currentVideoId && isPlaying) {
         albumArt.style.display = 'block';
       }
       searchSuggestions.classList.remove('expanded');
@@ -190,6 +206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const query = e.target.value;
     if (!query) {
       searchSuggestions.innerHTML = '';
+      searchSuggestions.style.display = 'none';
       return;
     }
     searchSuggestions.style.display = 'block';
@@ -214,13 +231,28 @@ document.addEventListener('DOMContentLoaded', async () => {
           searchSuggestions.innerHTML = '';
           results.slice(0, 5).forEach((song) => {
             const div = document.createElement('div');
-            div.textContent = song.snippet.title;
-            div.addEventListener('click', () => {
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = song.snippet.title;
+            titleSpan.addEventListener('click', () => {
+              isLoading = true;
               playAudio(song.id.videoId, song.snippet.title);
               searchInput.value = '';
               searchSuggestions.style.display = 'none';
               showPlayerContent();
             });
+            const queueButton = document.createElement('button');
+            queueButton.className = 'suggestion-queue-button';
+            queueButton.textContent = 'Add to Queue';
+            queueButton.addEventListener('click', async () => {
+              await fetch('/api/add-to-queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ videoId: song.id.videoId, title: song.snippet.title }),
+              });
+              fetchQueue();
+            });
+            div.appendChild(titleSpan);
+            div.appendChild(queueButton);
             searchSuggestions.appendChild(div);
           });
           return;
@@ -263,6 +295,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const titleSpan = document.createElement('span');
           titleSpan.textContent = song.snippet.title;
           titleSpan.addEventListener('click', () => {
+            isLoading = true;
             playAudio(song.id.videoId, song.snippet.title);
             searchInput.value = '';
             searchResultsDiv.style.display = 'none';
@@ -333,7 +366,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const div = document.createElement('div');
       const span = document.createElement('span');
       span.textContent = item.title;
-      span.addEventListener('click', () => playAudio(item.id, item.title));
+      span.addEventListener('click', () => {
+        isLoading = true;
+        playAudio(item.id, item.title);
+      });
       const button = document.createElement('button');
       button.className = 'button';
       if (history.pinned.some((p) => p.id === item.id)) {
@@ -373,12 +409,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     queue.forEach((item, index) => {
       const div = document.createElement('div');
       div.textContent = `Queue ${index + 1}: ${item.title}`;
-      div.addEventListener('click', () => playAudio(item.id, item.title));
+      div.addEventListener('click', () => {
+        isLoading = true;
+        playAudio(item.id, item.title);
+      });
       queueList.appendChild(div);
       if (index === 0) nextVideoId = item.id;
     });
 
-    // If queue is empty and there's a current song, add one suggestion
     if (queue.length === 0 && currentVideoId) {
       let retries = 0;
       while (retries < MAX_RETRIES) {
@@ -399,7 +437,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             queue.push({ id: suggestion.id.videoId, title: suggestion.snippet.title });
             const div = document.createElement('div');
             div.textContent = `Queue 1: ${suggestion.snippet.title}`;
-            div.addEventListener('click', () => playAudio(suggestion.id.videoId, suggestion.snippet.title));
+            div.addEventListener('click', () => {
+              isLoading = true;
+              playAudio(suggestion.id.videoId, suggestion.snippet.title);
+            });
             queueList.appendChild(div);
             nextVideoId = suggestion.id.videoId;
           }

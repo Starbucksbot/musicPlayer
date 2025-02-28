@@ -23,6 +23,12 @@
             <path d="M6 6h12v12H6z"/>
           </svg>
         </button>
+        <button id="sleepButton" class="button control-button">
+          <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 9.557a3 3 0 1 0-2-5.523L12 17.11V4h-2v15h2v-2.057l6-13.02a3 3 0 0 0 2 5.634z"/>
+          </svg>
+        </button>
+        <span id="sleepCountdown" class="countdown"></span>
       </div>
       <div id="searchSuggestions" class="suggestions glass"></div>
     </div>
@@ -36,6 +42,7 @@
           <div id="albumArtContainer">
             <img id="albumArt" alt="Album Art" style="display: none;">
             <div id="searchResults" class="search-results"></div>
+            <div id="loadingCircle" class="loading-circle" style="display: none;"></div>
           </div>
           <div class="controls-container">
             <div class="controls">
@@ -57,12 +64,6 @@
                   <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
                 </svg>
               </button>
-              <button class="button control-button" id="sleepButton">
-                <svg class="button-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20 9.557a3 3 0 1 0-2-5.523L12 17.11V4h-2v15h2v-2.057l6-13.02a3 3 0 0 0 2 5.634z"/>
-                </svg>
-              </button>
-              <span id="sleepCountdown" class="countdown"></span>
             </div>
             <div class="progress-container">
               <span id="currentTime">0:00</span>
