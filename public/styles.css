@@ -93,6 +93,34 @@
     box-shadow: 0 0 5px rgba(255, 64, 129, 0.2);
   }
   
+  #stopButton {
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #ff4444; /* Red to indicate stop */
+    background: linear-gradient(145deg, #1a1a1a, #2c2c2c);
+    border: 1px solid #ff4444;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
+  }
+  
+  #stopButton:hover {
+    background: linear-gradient(145deg, #2c2c2c, #1a1a1a);
+    box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+    transform: scale(1.05);
+  }
+  
+  #stopButton:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 5px rgba(255, 68, 68, 0.2);
+  }
+  
   .suggestions {
     position: absolute;
     top: 50px;
@@ -264,6 +292,15 @@
     transform: scale(0.95);
   }
   
+  .sleep-menu div.default {
+    background: #ff4081;
+    color: #fff;
+  }
+  
+  .sleep-menu div.default:hover::before {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
   .progress-container {
     display: flex;
     align-items: center;
@@ -288,18 +325,18 @@
     border-radius: 4px;
   }
   
-  #historyList div, #suggestionsList div {
+  #historyList div, #queueList div {
     margin: 10px 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
   }
   
-  #historyList div span, #suggestionsList div {
+  #historyList div span, #queueList div {
     cursor: pointer;
   }
   
-  #suggestionsList div:first-child {
+  #queueList div:first-child {
     font-weight: bold;
     color: #ff4081;
   }

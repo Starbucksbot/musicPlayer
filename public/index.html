@@ -14,6 +14,7 @@
       <div class="search-wrapper">
         <input type="text" id="searchInput" placeholder="Search YouTube music...">
         <button id="searchButton" class="button">Search</button>
+        <button id="stopButton" class="button stop-button">Stop</button>
       </div>
       <div id="searchSuggestions" class="suggestions glass"></div>
     </div>
@@ -43,9 +44,9 @@
           </div>
         </div>
       </div>
-      <div class="panel glass" id="suggestionsPanel">
-        <h2 id="suggestionsTitle">Suggestions</h2>
-        <div id="suggestionsList"></div>
+      <div class="panel glass" id="queuePanel">
+        <h2 id="queueTitle">Queue</h2>
+        <div id="queueList"></div>
       </div>
     </div>
   </div>
