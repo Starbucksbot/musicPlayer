@@ -24,8 +24,10 @@
       </div>
       <div class="panel glass middle-panel" id="middlePanel">
         <div id="playerContent">
-          <img id="albumArt" alt="Album Art" style="display: none;">
-          <div class="spacer"></div>
+          <div id="albumArtContainer">
+            <img id="albumArt" alt="Album Art" style="display: none;">
+            <div id="searchResults" class="search-results"></div>
+          </div>
           <div class="controls-container">
             <div class="controls">
               <button class="button control-button" id="prevButton">Prev</button>
@@ -40,7 +42,6 @@
             </div>
           </div>
         </div>
-        <div id="searchResults" class="search-results"></div>
       </div>
       <div class="panel glass" id="suggestionsPanel">
         <h2 id="suggestionsTitle">Suggestions</h2>
