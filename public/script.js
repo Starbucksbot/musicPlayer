@@ -36,7 +36,10 @@ function triggerSearch() {
 }
 
 searchInput.addEventListener('input', triggerSearch);
-searchButton.addEventListener('click', triggerSearch);
+searchButton.addEventListener('click', (e) => {
+  e.preventDefault(); // Prevent form submission
+  triggerSearch();
+});
 
 clearSearch.addEventListener('click', () => {
   searchInput.value = '';
@@ -72,8 +75,14 @@ function displaySearchResults(results) {
         <button class="play-next-btn">Play Next</button>
       </div>
     `;
-    item.querySelector('.queue-btn').addEventListener('click', () => addToQueue(result.videoId, result.title, false));
-    item.querySelector('.play-next-btn').addEventListener('click', () => addToQueue(result.videoId, result.title, true));
+    item.querySelector('.queue-btn').addEventListener('click', (e) => {
+      e.preventDefault(); // Prevent any default behavior
+      addToQueue(result.videoId, result.title, false);
+    });
+    item.querySelector('.play-next-btn').addEventListener('click', (e) => {
+      e.preventDefault(); // Prevent any default behavior
+      addToQueue(result.videoId, result.title, true);
+    });
     item.addEventListener('click', (e) => {
       if (!e.target.classList.contains('queue-btn') && !e.target.classList.contains('play-next-btn')) {
         playSong(result.videoId, result.title, true);
@@ -193,7 +202,8 @@ function updateQueueDisplay(queue) {
       <p>${index + 1}. ${item.title}</p>
       <button class="remove-btn">Remove</button>
     `;
-    queueItem.querySelector('.remove-btn').addEventListener('click', async () => {
+    queueItem.querySelector('.remove-btn').addEventListener('click', async (e) => {
+      e.preventDefault(); // Prevent any default behavior
       await fetch('/queue/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,14 +276,16 @@ queueBtn.addEventListener('click', () => {
     .then(queue => updateQueueDisplay(queue));
 });
 
-sleepBtn.addEventListener('click', () => {
+sleepBtn.addEventListener('click', (e) => {
+  e.preventDefault(); // Prevent default behavior
   toggleDropdown(sleepBtn, sleepOptions);
   if (!sleepOptions.children.length) {
     populateSleepOptions();
   }
 });
 
-clientSideBtn.addEventListener('click', () => {
+clientSideBtn.addEventListener('click', (e) => {
+  e.preventDefault(); // Prevent default behavior
   isClientSide = !isClientSide;
   clientSideBtn.textContent = isClientSide ? 'Server Side' : 'Client Side';
   if (!isClientSide) {
@@ -287,7 +299,8 @@ function populateSleepOptions() {
     const option = document.createElement('div');
     option.className = 'sleep-option';
     option.textContent = `${i} hour${i > 1 ? 's' : ''}`;
-    option.addEventListener('click', () => {
+    option.addEventListener('click', (e) => {
+      e.preventDefault(); // Prevent default behavior
       if (isClientSide) {
         startSleepTimer(i * 60 * 60 * 1000);
       } else {
@@ -335,7 +348,7 @@ function formatTime(milliseconds) {
 // Real-time updates via SSE
 const eventSource = new EventSource('/events');
 eventSource.onmessage = (event) => {
-  const { currentSong, queue, sleepTimer } = JSON.parse(event.data);
+  const { currentSong, queue, sleepTimer, currentTime } = JSON.parse(event.data);
   if (!isClientSide) {
     if (currentSong) {
       const encodedTitle = encodeURIComponent(currentSong.title);
@@ -346,6 +359,7 @@ eventSource.onmessage = (event) => {
         audioPlayer.play().catch(err => console.error('Playback error:', err));
         currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
       }
+      audioPlayer.currentTime = currentTime; // Sync playback position
     } else {
       audioPlayer.pause();
       audioPlayer.src = '';
@@ -359,6 +373,17 @@ eventSource.onmessage = (event) => {
     }
   }
 };
+
+// Sync time back to server periodically
+audioPlayer.addEventListener('timeupdate', () => {
+  if (!isClientSide && currentSong) {
+    fetch('/sync-time', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ time: Math.floor(audioPlayer.currentTime) }),
+    });
+  }
+});
 
 audioPlayer.addEventListener('ended', () => {
   if (!isClientSide) {
