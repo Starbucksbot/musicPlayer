@@ -16,6 +16,7 @@ const loadingPercent = document.getElementById('loading-percent');
 let debounceTimer;
 let sleepTimer = null;
 let loadingInterval = null;
+let queue = []; // Unlimited queue
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -56,10 +57,18 @@ function displaySearchResults(results) {
     item.innerHTML = `
       <img src="${result.thumbnail}" alt="${result.title}" width="50">
       <span>${result.title}</span>
+      <div class="result-item-buttons">
+        <button class="queue-btn">Add to Queue</button>
+        <button class="play-next-btn">Play Next</button>
+      </div>
     `;
-    item.addEventListener('click', () => {
-      playSong(result.videoId, result.title);
-      searchResults.style.display = 'none';
+    item.querySelector('.queue-btn').addEventListener('click', () => addToQueue(result.videoId, result.title));
+    item.querySelector('.play-next-btn').addEventListener('click', () => addToQueueNext(result.videoId, result.title));
+    item.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('queue-btn') && !e.target.classList.contains('play-next-btn')) {
+        playSong(result.videoId, result.title);
+        searchResults.style.display = 'none';
+      }
     });
     searchResults.appendChild(item);
   });
@@ -72,7 +81,6 @@ function playSong(videoId, title) {
   audioPlayer.src = streamUrl;
   audioPlayer.load();
 
-  // Show loading bar and simulate progress
   loadingBar.style.display = 'block';
   let progress = 0;
   loadingProgress.style.width = '0%';
@@ -80,14 +88,14 @@ function playSong(videoId, title) {
 
   if (loadingInterval) clearInterval(loadingInterval);
   loadingInterval = setInterval(() => {
-    progress += 2; // Simulate progress (adjust speed as needed)
+    progress += 2;
     if (progress >= 100) {
       progress = 100;
       clearInterval(loadingInterval);
     }
     loadingProgress.style.width = `${progress}%`;
     loadingPercent.textContent = `${progress}%`;
-  }, 100); // Update every 100ms
+  }, 100);
 
   audioPlayer.addEventListener('canplay', () => {
     clearInterval(loadingInterval);
@@ -95,7 +103,7 @@ function playSong(videoId, title) {
     loadingPercent.textContent = '100%';
     setTimeout(() => {
       loadingBar.style.display = 'none';
-    }, 500); // Hide after a short delay
+    }, 500);
     audioPlayer.play().catch(err => {
       console.error('Playback error:', err);
       alert('Failed to play audio. The video might be unavailable or restricted.');
@@ -108,7 +116,58 @@ function playSong(videoId, title) {
     alert('Failed to load audio stream.');
   }, { once: true });
 
+  audioPlayer.addEventListener('ended', playNextInQueue, { once: true });
   fetchHistory();
+}
+
+function addToQueue(videoId, title) {
+  queue.push({ videoId, title });
+  updateQueueDisplay();
+  preloadQueue();
+}
+
+function addToQueueNext(videoId, title) {
+  if (queue.length === 0) {
+    queue.push({ videoId, title });
+  } else {
+    queue.splice(1, 0, { videoId, title }); // Insert after current song
+  }
+  updateQueueDisplay();
+  preloadQueue();
+}
+
+function playNextInQueue() {
+  if (queue.length > 0) {
+    const nextSong = queue.shift();
+    playSong(nextSong.videoId, nextSong.title);
+    updateQueueDisplay();
+    preloadQueue();
+  }
+}
+
+function preloadQueue() {
+  for (let i = 0; i < Math.min(3, queue.length); i++) {
+    const { videoId, title } = queue[i];
+    const streamUrl = `/stream/${encodeURIComponent(videoId)}?title=${encodeURIComponent(title)}`;
+    fetch(streamUrl, { method: 'HEAD' }); // Trigger server to cache the file
+  }
+}
+
+function updateQueueDisplay() {
+  queueList.innerHTML = '';
+  queue.forEach((item, index) => {
+    const queueItem = document.createElement('div');
+    queueItem.className = 'queue-item';
+    queueItem.innerHTML = `
+      <p>${index + 1}. ${item.title}</p>
+    `;
+    queueItem.addEventListener('click', () => {
+      playSong(item.videoId, item.title);
+      queue.splice(0, index + 1); // Remove all items up to and including this one
+      updateQueueDisplay();
+    });
+    queueList.appendChild(queueItem);
+  });
 }
 
 async function fetchHistory() {
@@ -151,7 +210,7 @@ recentlyPlayedBtn.addEventListener('click', () => {
 
 queueBtn.addEventListener('click', () => {
   toggleDropdown(queueBtn, queueList);
-  queueList.innerHTML = '<p>Queue is empty for now.</p>';
+  updateQueueDisplay();
 });
 
 sleepBtn.addEventListener('click', () => {
@@ -180,6 +239,8 @@ function startSleepTimer(milliseconds) {
     if (timeLeft <= 0) {
       clearInterval(sleepTimer);
       audioPlayer.pause();
+      queue = []; // Clear queue when sleep timer ends
+      updateQueueDisplay();
       sleepTimerDisplay.textContent = '';
       sleepTimer = null;
     } else {
