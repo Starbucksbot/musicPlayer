@@ -79,7 +79,11 @@ app.get('/stream/:videoId', async (req, res) => {
     }
   }
 
-  updateHistory(videoId, title, cacheFile);
+  // Only update history if explicitly requested via query param
+  const updateHistoryFlag = req.query.updateHistory === 'true';
+  if (updateHistoryFlag) {
+    updateHistory(videoId, title, cacheFile);
+  }
 });
 
 function fallbackToYtdlp(url, cacheFile, req, res) {
@@ -171,11 +175,9 @@ function updateHistory(videoId, title, cacheFile) {
     history = [];
   }
 
-  // Add new entry
   const newEntry = { videoId, title, timestamp: new Date().toISOString(), cacheFile };
   history.unshift(newEntry);
 
-  // Remove oldest entry and its cache file if exceeding 10
   if (history.length > 10) {
     const removedEntry = history.pop();
     if (removedEntry.cacheFile && fs.existsSync(removedEntry.cacheFile)) {

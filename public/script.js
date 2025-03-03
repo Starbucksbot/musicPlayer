@@ -12,6 +12,7 @@ const sleepTimerDisplay = document.getElementById('sleep-timer');
 const loadingBar = document.getElementById('loading-bar');
 const loadingProgress = document.querySelector('.loading-progress');
 const loadingPercent = document.getElementById('loading-percent');
+const currentTrack = document.getElementById('current-track');
 
 let debounceTimer;
 let sleepTimer = null;
@@ -66,7 +67,7 @@ function displaySearchResults(results) {
     item.querySelector('.play-next-btn').addEventListener('click', () => addToQueueNext(result.videoId, result.title));
     item.addEventListener('click', (e) => {
       if (!e.target.classList.contains('queue-btn') && !e.target.classList.contains('play-next-btn')) {
-        playSong(result.videoId, result.title);
+        playSong(result.videoId, result.title, true);
         searchResults.style.display = 'none';
       }
     });
@@ -75,11 +76,14 @@ function displaySearchResults(results) {
   searchResults.style.display = 'block';
 }
 
-function playSong(videoId, title) {
+function playSong(videoId, title, updateHistory = false) {
   const encodedTitle = encodeURIComponent(title);
-  const streamUrl = `/stream/${videoId}?title=${encodedTitle}`;
+  const streamUrl = `/stream/${videoId}?title=${encodedTitle}&updateHistory=${updateHistory}`;
   audioPlayer.src = streamUrl;
   audioPlayer.load();
+
+  // Update current track display
+  currentTrack.textContent = `Currently Playing: ${title}`;
 
   loadingBar.style.display = 'block';
   let progress = 0;
@@ -113,11 +117,12 @@ function playSong(videoId, title) {
   audioPlayer.addEventListener('error', () => {
     clearInterval(loadingInterval);
     loadingBar.style.display = 'none';
+    currentTrack.textContent = 'Currently Playing: Nothing';
     alert('Failed to load audio stream.');
   }, { once: true });
 
   audioPlayer.addEventListener('ended', playNextInQueue, { once: true });
-  fetchHistory();
+  if (updateHistory) fetchHistory();
 }
 
 function addToQueue(videoId, title) {
@@ -127,7 +132,7 @@ function addToQueue(videoId, title) {
 }
 
 function addToQueueNext(videoId, title) {
-  queue.unshift({ videoId, title }); // Add to top of queue
+  queue.unshift({ videoId, title });
   updateQueueDisplay();
   preloadQueue();
 }
@@ -135,16 +140,18 @@ function addToQueueNext(videoId, title) {
 function playNextInQueue() {
   if (queue.length > 0) {
     const nextSong = queue.shift();
-    playSong(nextSong.videoId, nextSong.title);
+    playSong(nextSong.videoId, nextSong.title, false);
     updateQueueDisplay();
     preloadQueue();
+  } else {
+    currentTrack.textContent = 'Currently Playing: Nothing';
   }
 }
 
 function preloadQueue() {
   for (let i = 0; i < Math.min(3, queue.length); i++) {
     const { videoId, title } = queue[i];
-    const streamUrl = `/stream/${encodeURIComponent(videoId)}?title=${encodeURIComponent(title)}`;
+    const streamUrl = `/stream/${encodeURIComponent(videoId)}?title=${encodeURIComponent(title)}&updateHistory=false`;
     fetch(streamUrl, { method: 'HEAD' });
   }
 }
@@ -155,13 +162,13 @@ function updateQueueDisplay() {
     const queueItem = document.createElement('div');
     queueItem.className = 'queue-item';
     if (index >= 3) {
-      queueItem.classList.add('not-preloaded'); // Dim items beyond top 3
+      queueItem.classList.add('not-preloaded');
     }
     queueItem.innerHTML = `
       <p>${index + 1}. ${item.title}</p>
     `;
     queueItem.addEventListener('click', () => {
-      playSong(item.videoId, item.title);
+      playSong(item.videoId, item.title, true);
       queue.splice(0, index + 1);
       updateQueueDisplay();
     });
@@ -189,7 +196,7 @@ function displayHistory(history) {
       <small>${new Date(item.timestamp).toLocaleString()}</small>
     `;
     historyItem.addEventListener('click', () => {
-      playSong(item.videoId, item.title);
+      playSong(item.videoId, item.title, true);
     });
     recentlyPlayedList.appendChild(historyItem);
   });
@@ -242,6 +249,7 @@ function startSleepTimer(milliseconds) {
       updateQueueDisplay();
       sleepTimerDisplay.textContent = '';
       sleepTimer = null;
+      currentTrack.textContent = 'Currently Playing: Nothing';
     } else {
       sleepTimerDisplay.textContent = formatTime(timeLeft);
     }
