@@ -2,11 +2,18 @@
   "name": "music-player",
   "version": "1.0.0",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "build:css": "npx tailwindcss -i ./styles/tailwind.css -o ./public/styles.css",
+    "build:css:watch": "npx tailwindcss -i ./styles/tailwind.css -o ./public/styles.css --watch"
   },
   "dependencies": {
     "express": "^4.18.2",
     "node-fetch": "^2.6.7",
     "pm2": "^5.2.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.31",
+    "autoprefixer": "^10.4.16"
   }
 }

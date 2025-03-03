@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Music Player</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
@@ -36,7 +35,7 @@
             <button class="button play-button w-20 h-20 rounded-full" id="playButton">Play</button>
             <button class="button control-button w-14 h-14 rounded-full" id="nextButton">Next</button>
           </div>
-          <div class="progress-container flex items-center gap-4 w-full">
+          <div class="progress-container flex items-center gap-4 w-full relative">
             <span id="currentTime" class="text-sm">0:00</span>
             <progress id="progressBar" value="0" max="100" class="w-full h-2 bg-gray-700 rounded-full"></progress>
             <progress id="loadingBar" value="0" max="100" class="w-full h-1 bg-gray-600 rounded-full absolute" style="display: none;"></progress>
@@ -44,7 +43,7 @@
           </div>
         </div>
       </section>
-      <section class="panel glass p-6 rounded-2xl flex-1 min-w-[300px] max-h-[500px] overflow-y-auto">
+      <section class="panel glass p-6 rounded-2xl flex-1 min-w-[300px] max-h-[500px] overflow-y-auto" id="queuePanel">
         <h2 id="queueTitle" class="text-xl font-bold mb-4">Queue</h2>
         <button id="clearQueueButton" class="button px-6 py-3 mb-4">Clear Queue</button>
         <div id="queueList"></div>

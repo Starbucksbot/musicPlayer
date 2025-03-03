@@ -10,7 +10,7 @@ const app = express();
 const port = 4200;
 const historyFile = path.join(__dirname, '..', 'data', 'history.json');
 const queueFile = path.join(__dirname, '..', 'data', 'queue.json');
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'your-key-here'; // Fallback for testing
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'your-key-here';
 
 let playerState = { currentVideoId: null, isPlaying: false, queue: [] };
 let quotaExceeded = false;

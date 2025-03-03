@@ -28,8 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
   audioPlayer.addEventListener('progress', updateLoadingBar);
   audioPlayer.addEventListener('canplay', () => {
     document.getElementById('loadingBar').style.display = 'none';
+    if (isPlaying) audioPlayer.play().catch(err => console.error('Play error:', err));
   });
-  audioPlayer.addEventListener('error', (e) => console.error('Audio error:', e));
+  audioPlayer.addEventListener('error', (e) => {
+    console.error('Audio error:', e);
+    alert('Failed to load audio. Please try another song.');
+  });
 
   document.getElementById('playButton').addEventListener('click', togglePlay);
   document.getElementById('prevButton').addEventListener('click', playPrevious);
@@ -56,10 +60,12 @@ async function syncWithServer() {
   queue = state.queue;
   if (currentVideoId && audioPlayer.src !== `/api/audio?videoId=${currentVideoId}`) {
     audioPlayer.src = `/api/audio?videoId=${currentVideoId}`;
+    audioPlayer.load();
     if (isPlaying) audioPlayer.play().catch(err => console.error('Play error:', err));
-    else document.getElementById('albumArt').style.display = 'none';
   }
-  document.getElementById('albumArt').src = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
+  const albumArt = document.getElementById('albumArt');
+  albumArt.src = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
+  albumArt.onerror = () => albumArt.src = 'fallback.jpg';
   fetchHistory();
   fetchQueue();
 }
@@ -86,12 +92,10 @@ function stopSearch() {
 }
 
 async function playAudio(videoId, title) {
-  if (currentVideoId === videoId && audioPlayer.paused) {
-    audioPlayer.play();
-    return;
-  }
+  if (currentVideoId === videoId && !audioPlayer.paused) return;
   currentVideoId = videoId;
   audioPlayer.src = `/api/audio?videoId=${videoId}`;
+  audioPlayer.load();
   audioPlayer.play().catch(err => console.error('Play interrupted:', err));
   await fetch('/api/play', {
     method: 'POST',
@@ -148,7 +152,11 @@ function formatTime(seconds) {
 
 function togglePlay() {
   if (!currentVideoId) return;
-  isPlaying ? audioPlayer.pause() : audioPlayer.play().catch(err => console.error('Play error:', err));
+  if (isPlaying) {
+    audioPlayer.pause();
+  } else {
+    audioPlayer.play().catch(err => console.error('Play error:', err));
+  }
 }
 
 function playPrevious() {
