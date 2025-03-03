@@ -16,7 +16,7 @@ const loadingPercent = document.getElementById('loading-percent');
 let debounceTimer;
 let sleepTimer = null;
 let loadingInterval = null;
-let queue = []; // Unlimited queue
+let queue = [];
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -127,11 +127,7 @@ function addToQueue(videoId, title) {
 }
 
 function addToQueueNext(videoId, title) {
-  if (queue.length === 0) {
-    queue.push({ videoId, title });
-  } else {
-    queue.splice(1, 0, { videoId, title }); // Insert after current song
-  }
+  queue.unshift({ videoId, title }); // Add to top of queue
   updateQueueDisplay();
   preloadQueue();
 }
@@ -149,7 +145,7 @@ function preloadQueue() {
   for (let i = 0; i < Math.min(3, queue.length); i++) {
     const { videoId, title } = queue[i];
     const streamUrl = `/stream/${encodeURIComponent(videoId)}?title=${encodeURIComponent(title)}`;
-    fetch(streamUrl, { method: 'HEAD' }); // Trigger server to cache the file
+    fetch(streamUrl, { method: 'HEAD' });
   }
 }
 
@@ -158,12 +154,15 @@ function updateQueueDisplay() {
   queue.forEach((item, index) => {
     const queueItem = document.createElement('div');
     queueItem.className = 'queue-item';
+    if (index >= 3) {
+      queueItem.classList.add('not-preloaded'); // Dim items beyond top 3
+    }
     queueItem.innerHTML = `
       <p>${index + 1}. ${item.title}</p>
     `;
     queueItem.addEventListener('click', () => {
       playSong(item.videoId, item.title);
-      queue.splice(0, index + 1); // Remove all items up to and including this one
+      queue.splice(0, index + 1);
       updateQueueDisplay();
     });
     queueList.appendChild(queueItem);
@@ -239,7 +238,7 @@ function startSleepTimer(milliseconds) {
     if (timeLeft <= 0) {
       clearInterval(sleepTimer);
       audioPlayer.pause();
-      queue = []; // Clear queue when sleep timer ends
+      queue = [];
       updateQueueDisplay();
       sleepTimerDisplay.textContent = '';
       sleepTimer = null;
