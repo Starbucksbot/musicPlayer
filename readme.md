@@ -29,13 +29,17 @@ A web-based audio streaming application that plays YouTube audio content with se
    git clone https://github.com/Starbucksbot/musicPlayer.git
    cd musicPlayer
 2. **Install Node Dependencies**:
+   ```bash
     npm install
 3. **Install yt-dlp**:
+      ```bash
     pip install yt-dlp
 4. **Set Up Environment**:
     Fill in ecosystem.json file
+       ```bash
     PORT=3000
     API_KEY=<your-youtube-api-key>
+    
 - Replace <your-youtube-api-key> with your YouTube Data API key (optional).
 
 ## Usage
