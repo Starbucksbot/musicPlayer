@@ -10,15 +10,13 @@ const app = express();
 const port = 4200;
 const historyFile = path.join(__dirname, '..', 'data', 'history.json');
 const queueFile = path.join(__dirname, '..', 'data', 'queue.json');
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'your-key-here'; // Fallback for testing
 
-// Shared state with caching
 let playerState = { currentVideoId: null, isPlaying: false, queue: [] };
 let quotaExceeded = false;
 let lastQuotaErrorTime = null;
-const QUOTA_WAIT_TIME = 2 * 60 * 60 * 1000; // 2 hours
-const MAX_RETRIES = 3;
-const cache = new Map(); // In-memory cache for search results
+const QUOTA_WAIT_TIME = 2 * 60 * 60 * 1000;
+const cache = new Map();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
@@ -32,7 +30,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// File I/O Helpers
 async function getHistory() {
   try {
     const data = await fs.readFile(historyFile, 'utf8');
@@ -65,7 +62,6 @@ async function saveQueue(queue) {
   playerState.queue = await getQueue();
 })();
 
-// API Routes
 app.get('/api/history', async (req, res) => res.json(await getHistory()));
 
 app.post('/api/play', async (req, res) => {
@@ -131,9 +127,10 @@ app.get('/api/search', async (req, res) => {
       ? await searchWithYtDlp(q)
       : await searchWithYouTubeAPI(q);
     cache.set(cacheKey, results);
-    setTimeout(() => cache.delete(cacheKey), 10 * 60 * 1000); // Cache for 10 minutes
+    setTimeout(() => cache.delete(cacheKey), 10 * 60 * 1000);
     res.json(results);
   } catch (err) {
+    console.error(`Search error: ${err.message}`);
     res.status(500).json({ error: 'Search failed', details: err.message });
   }
 });
@@ -141,12 +138,14 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/audio', async (req, res) => {
   const { videoId } = req.query;
   if (!videoId) return res.status(400).json({ error: 'videoId required' });
+  console.log(`Loading audio for videoId: ${videoId}`);
   try {
     const { stdout } = await execPromise(
       `yt-dlp -f bestaudio --no-playlist --buffer-size 16k "https://www.youtube.com/watch?v=${videoId}" --get-url`
     );
     res.redirect(stdout.trim());
   } catch (err) {
+    console.error(`Audio load error for ${videoId}: ${err.message}`);
     res.status(500).json({ error: 'Audio streaming failed', details: err.message });
   }
 });
@@ -164,23 +163,24 @@ async function searchWithYtDlp(query) {
 }
 
 async function searchWithYouTubeAPI(query) {
-  let retries = 0;
-  while (retries < MAX_RETRIES) {
-    try {
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=5&key=${YOUTUBE_API_KEY}`
-      );
-      const data = await response.json();
-      if (data.error && data.error.code === 403) {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=5&key=${YOUTUBE_API_KEY}`
+    );
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      console.error(`YouTube API error: ${data.error?.message || response.statusText}`);
+      if (data.error?.code === 403) {
         quotaExceeded = true;
         lastQuotaErrorTime = Date.now();
         return await searchWithYtDlp(query);
       }
-      return data.items || [];
-    } catch (err) {
-      retries++;
-      if (retries === MAX_RETRIES) throw err;
+      throw new Error(data.error?.message || 'API request failed');
     }
+    return data.items || [];
+  } catch (err) {
+    console.error(`YouTube API fetch error: ${err.message}`);
+    throw err;
   }
 }
 

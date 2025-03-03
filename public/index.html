@@ -4,50 +4,49 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Music Player</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
   <div class="overlay"></div>
-  <div class="container">
-    <header class="search-bar glass">
-      <div class="search-wrapper">
-        <input type="text" id="searchInput" placeholder="Search YouTube music...">
-        <button id="searchButton" class="button">Search</button>
-        <button id="stopButton" class="button">Stop</button>
-        <button id="sleepButton" class="button">Sleep</button>
-        <span id="sleepCountdown" class="countdown"></span>
+  <div class="container mx-auto p-4 max-w-5xl">
+    <header class="search-bar glass p-6 rounded-2xl mb-8 sticky top-4 z-10">
+      <div class="search-wrapper flex flex-wrap gap-4 items-center justify-center relative">
+        <input type="text" id="searchInput" placeholder="Search YouTube music..." class="w-full max-w-md p-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-pink-500">
+        <button id="searchButton" class="button px-6 py-3">Search</button>
+        <button id="stopButton" class="button px-6 py-3">Stop</button>
+        <button id="sleepButton" class="button px-6 py-3">Sleep</button>
+        <span id="sleepCountdown" class="text-sm text-pink-500"></span>
         <div id="searchLoading" class="search-loading" style="display: none;"></div>
       </div>
-      <div id="searchSuggestions" class="suggestions glass" style="display: none;"></div>
     </header>
-    <main class="panels">
-      <section class="panel glass" id="historyPanel">
-        <h2>History</h2>
+    <main class="panels flex flex-wrap gap-6 justify-center">
+      <section class="panel glass p-6 rounded-2xl flex-1 min-w-[300px] max-h-[500px] overflow-y-auto">
+        <h2 class="text-xl font-bold mb-4">History</h2>
         <div id="historyList"></div>
       </section>
-      <section class="panel glass middle-panel" id="middlePanel">
-        <div id="playerContent">
-          <div id="mediaContainer">
-            <img id="albumArt" alt="Album Art" style="display: none;">
-            <div id="searchResults" class="search-results"></div>
+      <section class="panel glass p-6 rounded-2xl flex-2 min-w-[300px] flex flex-col items-center">
+        <div id="mediaContainer" class="w-full max-w-md h-80 flex items-center justify-center relative">
+          <img id="albumArt" alt="Album Art" class="w-full rounded-xl shadow-lg" style="display: none;">
+          <div id="searchResults" class="search-results w-full"></div>
+        </div>
+        <div class="controls-container w-full mt-6">
+          <div class="controls flex gap-6 justify-center mb-6">
+            <button class="button control-button w-14 h-14 rounded-full" id="prevButton">Prev</button>
+            <button class="button play-button w-20 h-20 rounded-full" id="playButton">Play</button>
+            <button class="button control-button w-14 h-14 rounded-full" id="nextButton">Next</button>
           </div>
-          <div class="controls-container">
-            <div class="controls">
-              <button class="button control-button" id="prevButton">Prev</button>
-              <button class="button play-button" id="playButton">Play</button>
-              <button class="button control-button" id="nextButton">Next</button>
-            </div>
-            <div class="progress-container">
-              <span id="currentTime">0:00</span>
-              <progress id="progressBar" value="0" max="100"></progress>
-              <span id="duration">0:00</span>
-            </div>
+          <div class="progress-container flex items-center gap-4 w-full">
+            <span id="currentTime" class="text-sm">0:00</span>
+            <progress id="progressBar" value="0" max="100" class="w-full h-2 bg-gray-700 rounded-full"></progress>
+            <progress id="loadingBar" value="0" max="100" class="w-full h-1 bg-gray-600 rounded-full absolute" style="display: none;"></progress>
+            <span id="duration" class="text-sm">0:00</span>
           </div>
         </div>
       </section>
-      <section class="panel glass" id="queuePanel">
-        <h2 id="queueTitle">Queue</h2>
-        <button id="clearQueueButton" class="button">Clear Queue</button>
+      <section class="panel glass p-6 rounded-2xl flex-1 min-w-[300px] max-h-[500px] overflow-y-auto">
+        <h2 id="queueTitle" class="text-xl font-bold mb-4">Queue</h2>
+        <button id="clearQueueButton" class="button px-6 py-3 mb-4">Clear Queue</button>
         <div id="queueList"></div>
       </section>
     </main>
