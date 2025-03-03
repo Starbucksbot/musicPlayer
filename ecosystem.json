@@ -1,12 +1,14 @@
 {
-    "apps": [
-      {
-        "name": "music-player",
-        "script": "server/server.js",
-        "env": {
-          "NODE_ENV": "production",
-          "YOUTUBE_API_KEY": "your-key-here" 
-        }
+  "apps": [
+    {
+      "name": "music-player",
+      "script": "server/server.js",
+      "instances": "max",
+      "exec_mode": "cluster",
+      "env": {
+        "NODE_ENV": "production",
+        "YOUTUBE_API_KEY": "your-key-here"
       }
-    ]
-  }
+    }
+  ]
+}
