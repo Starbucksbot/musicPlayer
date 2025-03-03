@@ -21,7 +21,6 @@ app.use(express.json());
 
 // Server-side state
 let currentSong = null;
-let currentTime = 0; // Playback position in seconds
 let clients = [];
 let sleepTimer = null;
 let sleepTimeout = null;
@@ -125,15 +124,12 @@ app.get('/events', (req, res) => {
 
   const sendUpdate = () => {
     const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
-    const data = JSON.stringify({ currentSong, queue, sleepTimer, currentTime });
+    const data = JSON.stringify({ currentSong, queue, sleepTimer });
     res.write(`data: ${data}\n\n`);
   };
 
   sendUpdate();
-  const interval = setInterval(() => {
-    if (currentSong) currentTime += 5; // Increment time every 5 seconds
-    sendUpdate();
-  }, 5000); // Update every 5 seconds to reduce frequency
+  const interval = setInterval(sendUpdate, 5000);
 
   req.on('close', () => {
     clearInterval(interval);
@@ -188,7 +184,7 @@ app.post('/queue/add', (req, res) => {
   res.json(queue);
 });
 
-app.post('/queue/remove-first', (req, res) => {
+function playNextInQueue() {
   let queue = [];
   try {
     if (fs.existsSync(QUEUE_FILE)) {
@@ -200,20 +196,22 @@ app.post('/queue/remove-first', (req, res) => {
     if (queue.length > 0) {
       const nextSong = queue.shift();
       currentSong = nextSong;
-      currentTime = 0;
       fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
       predownloadQueue(queue);
       broadcastUpdate();
     } else {
       currentSong = null;
-      currentTime = 0;
       broadcastUpdate();
     }
-    res.json(queue);
   } catch (error) {
     console.error('Queue remove error:', error);
-    res.status(500).json({ error: 'Failed to remove from queue' });
   }
+}
+
+app.post('/queue/remove-first', (req, res) => {
+  playNextInQueue();
+  const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
+  res.json(queue);
 });
 
 app.post('/queue/remove', (req, res) => {
@@ -242,7 +240,6 @@ app.post('/queue/remove', (req, res) => {
 app.post('/queue/clear', (req, res) => {
   fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
   currentSong = null;
-  currentTime = 0;
   if (sleepTimeout) {
     clearTimeout(sleepTimeout);
     sleepTimer = null;
@@ -254,7 +251,6 @@ app.post('/queue/clear', (req, res) => {
 app.post('/play', (req, res) => {
   const { videoId, title } = req.body;
   currentSong = { videoId, title, cacheFile: path.join(CACHE_DIR, `${videoId}.mp3`) };
-  currentTime = 0;
   broadcastUpdate();
   updateHistory(videoId, title, currentSong.cacheFile);
   res.json({ success: true });
@@ -271,22 +267,12 @@ app.post('/sleep', (req, res) => {
   sleepTimer = milliseconds;
   sleepTimeout = setTimeout(() => {
     currentSong = null;
-    currentTime = 0;
     fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
     sleepTimer = null;
     sleepTimeout = null;
     broadcastUpdate();
   }, milliseconds);
   broadcastUpdate();
-  res.json({ success: true });
-});
-
-app.post('/sync-time', (req, res) => {
-  const { time } = req.body;
-  if (currentSong) {
-    currentTime = time;
-    broadcastUpdate();
-  }
   res.json({ success: true });
 });
 
@@ -354,6 +340,24 @@ function serveCachedFile(cacheFile, req, res) {
   }
 }
 
+app.get('/history', (req, res) => {
+  try {
+    if (fs.existsSync(HISTORY_FILE)) {
+      const historyData = fs.readFileSync(HISTORY_FILE, 'utf8');
+      if (!historyData) {
+        return res.json([]);
+      }
+      const history = JSON.parse(historyData);
+      res.json(history);
+    } else {
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('History parsing error:', error);
+    res.json([]);
+  }
+});
+
 function updateHistory(videoId, title, cacheFile) {
   let history = [];
   try {
@@ -391,7 +395,7 @@ function updateHistory(videoId, title, cacheFile) {
 
 function broadcastUpdate() {
   const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
-  const data = JSON.stringify({ currentSong, queue, sleepTimer, currentTime });
+  const data = JSON.stringify({ currentSong, queue, sleepTimer });
   clients.forEach(client => client.write(`data: ${data}\n\n`));
 }
 

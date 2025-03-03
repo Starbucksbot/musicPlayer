@@ -348,7 +348,7 @@ function formatTime(milliseconds) {
 // Real-time updates via SSE
 const eventSource = new EventSource('/events');
 eventSource.onmessage = (event) => {
-  const { currentSong, queue, sleepTimer, currentTime } = JSON.parse(event.data);
+  const { currentSong, queue, sleepTimer } = JSON.parse(event.data);
   if (!isClientSide) {
     if (currentSong) {
       const encodedTitle = encodeURIComponent(currentSong.title);
@@ -358,10 +358,6 @@ eventSource.onmessage = (event) => {
         audioPlayer.load();
         audioPlayer.play().catch(err => console.error('Playback error:', err));
         currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
-      }
-      const timeDifference = Math.abs(audioPlayer.currentTime - currentTime);
-      if (timeDifference > 5) { // Sync only if difference > 5 seconds
-        audioPlayer.currentTime = currentTime;
       }
     } else {
       audioPlayer.pause();
@@ -376,20 +372,6 @@ eventSource.onmessage = (event) => {
     }
   }
 };
-
-// Sync time back to server periodically
-audioPlayer.addEventListener('timeupdate', () => {
-  if (!isClientSide && currentSong) {
-    const timeDifference = Math.abs(audioPlayer.currentTime - currentTime);
-    if (timeDifference > 5) { // Sync server only if significant difference
-      fetch('/sync-time', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ time: Math.floor(audioPlayer.currentTime) }),
-      });
-    }
-  }
-});
 
 audioPlayer.addEventListener('ended', () => {
   if (!isClientSide) {
