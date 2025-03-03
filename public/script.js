@@ -2,9 +2,16 @@ const searchInput = document.getElementById('search-input');
 const searchButton = document.getElementById('search-button');
 const searchResults = document.getElementById('search-results');
 const audioPlayer = document.getElementById('audio-player');
-const historyList = document.getElementById('history-list');
+const recentlyPlayedBtn = document.getElementById('recently-played-btn');
+const queueBtn = document.getElementById('queue-btn');
+const sleepBtn = document.getElementById('sleep-btn');
+const recentlyPlayedList = document.getElementById('recently-played-list');
+const queueList = document.getElementById('queue-list');
+const sleepOptions = document.getElementById('sleep-options');
+const sleepTimerDisplay = document.getElementById('sleep-timer');
 
 let debounceTimer;
+let sleepTimer = null;
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -59,11 +66,12 @@ function playSong(videoId, title) {
   const encodedTitle = encodeURIComponent(title);
   const streamUrl = `/stream/${videoId}?title=${encodedTitle}`;
   audioPlayer.src = streamUrl;
-  audioPlayer.load(); // Force reload to handle new source
+  audioPlayer.load();
   audioPlayer.play().catch(err => {
     console.error('Playback error:', err);
     alert('Failed to play audio. The video might be unavailable or restricted.');
   });
+  fetchHistory();
 }
 
 async function fetchHistory() {
@@ -77,7 +85,7 @@ async function fetchHistory() {
 }
 
 function displayHistory(history) {
-  historyList.innerHTML = '';
+  recentlyPlayedList.innerHTML = '';
   history.forEach(item => {
     const historyItem = document.createElement('div');
     historyItem.className = 'history-item';
@@ -85,8 +93,69 @@ function displayHistory(history) {
       <p>${item.title}</p>
       <small>${new Date(item.timestamp).toLocaleString()}</small>
     `;
-    historyList.appendChild(historyItem);
+    historyItem.addEventListener('click', () => {
+      playSong(item.videoId, item.title);
+    });
+    recentlyPlayedList.appendChild(historyItem);
   });
+}
+
+function toggleDropdown(btn, dropdown) {
+  document.querySelectorAll('.control-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.control-dropdown').forEach(d => d.classList.remove('active'));
+  btn.classList.add('active');
+  dropdown.classList.add('active');
+}
+
+recentlyPlayedBtn.addEventListener('click', () => {
+  toggleDropdown(recentlyPlayedBtn, recentlyPlayedList);
+  fetchHistory();
+});
+
+queueBtn.addEventListener('click', () => {
+  toggleDropdown(queueBtn, queueList);
+  queueList.innerHTML = '<p>Queue is empty for now.</p>';
+});
+
+sleepBtn.addEventListener('click', () => {
+  toggleDropdown(sleepBtn, sleepOptions);
+  if (!sleepOptions.children.length) {
+    populateSleepOptions();
+  }
+});
+
+function populateSleepOptions() {
+  for (let i = 1; i <= 10; i++) {
+    const option = document.createElement('div');
+    option.className = 'sleep-option';
+    option.textContent = `${i} hour${i > 1 ? 's' : ''}`;
+    option.addEventListener('click', () => startSleepTimer(i * 60 * 60 * 1000));
+    sleepOptions.appendChild(option);
+  }
+}
+
+function startSleepTimer(milliseconds) {
+  if (sleepTimer) clearInterval(sleepTimer);
+  let timeLeft = milliseconds;
+  sleepTimerDisplay.textContent = formatTime(timeLeft);
+  sleepTimer = setInterval(() => {
+    timeLeft -= 1000;
+    if (timeLeft <= 0) {
+      clearInterval(sleepTimer);
+      audioPlayer.pause();
+      sleepTimerDisplay.textContent = '';
+      sleepTimer = null;
+    } else {
+      sleepTimerDisplay.textContent = formatTime(timeLeft);
+    }
+  }, 1000);
+}
+
+function formatTime(milliseconds) {
+  const hours = Math.floor(milliseconds / (1000 * 60 * 60));
+  const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
+  return `${hours}h ${minutes}m ${seconds}s`;
 }
 
 fetchHistory();

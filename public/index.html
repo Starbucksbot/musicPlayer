@@ -16,9 +16,13 @@
       <button id="search-button">Search</button>
       <div id="search-results" class="dropdown"></div>
     </div>
-    <div id="history">
-      <h3>Recently Played</h3>
-      <div id="history-list"></div>
+    <div id="control-panel">
+      <button id="recently-played-btn" class="control-btn active">Recently Played</button>
+      <button id="queue-btn" class="control-btn">Queue</button>
+      <button id="sleep-btn" class="control-btn">Sleep <span id="sleep-timer"></span></button>
+      <div id="recently-played-list" class="control-dropdown active"></div>
+      <div id="queue-list" class="control-dropdown"></div>
+      <div id="sleep-options" class="control-dropdown"></div>
     </div>
   </div>
   <script src="script.js"></script>

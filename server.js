@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 4200; // Allow dynamic port for flexibility
+const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY;
 const youtube = google.youtube({ version: 'v3', auth: API_KEY });
 const CACHE_DIR = path.join(__dirname, 'cache');
@@ -70,35 +70,42 @@ app.get('/stream/:videoId', async (req, res) => {
       stream.on('error', async (err) => {
         console.error('ytdl-core streaming error:', err);
         if (!res.headersSent) {
-          await fallbackToYtdlp(url, cacheFile, res);
+          await fallbackToYtdlp(url, cacheFile, req, res);
         }
       });
     } catch (err) {
       console.error('ytdl-core initialization error:', err);
-      await fallbackToYtdlp(url, cacheFile, res);
+      await fallbackToYtdlp(url, cacheFile, req, res);
     }
   }
 
   updateHistory(videoId, title);
 });
 
-async function fallbackToYtdlp(url, cacheFile, res) {
-  const command = `yt-dlp -x --audio-format mp3 -o "${cacheFile}" "${url}"`;
-  exec(command, (error, stdout, stderr) => {
-    console.log('yt-dlp stdout:', stdout);
-    console.error('yt-dlp stderr:', stderr);
-    if (error) {
-      console.error('yt-dlp error:', error);
-      if (!res.headersSent) {
-        res.status(500).send('Failed to stream audio with yt-dlp');
+function fallbackToYtdlp(url, cacheFile, req, res) {
+  return new Promise((resolve, reject) => {
+    const command = `yt-dlp -x --audio-format mp3 -o "${cacheFile}" "${url}"`;
+    exec(command, (error, stdout, stderr) => {
+      console.log('yt-dlp stdout:', stdout);
+      console.error('yt-dlp stderr:', stderr);
+      if (error) {
+        console.error('yt-dlp error:', error);
+        if (!res.headersSent) {
+          res.status(500).send('Failed to stream audio with yt-dlp');
+        }
+        reject(error);
+        return;
       }
-      return;
-    }
-    if (fs.existsSync(cacheFile)) {
-      serveCachedFile(cacheFile, null, res);
-    } else {
-      res.status(500).send('Failed to cache audio with yt-dlp');
-    }
+      if (fs.existsSync(cacheFile)) {
+        serveCachedFile(cacheFile, req, res);
+        resolve();
+      } else {
+        if (!res.headersSent) {
+          res.status(500).send('Failed to cache audio with yt-dlp');
+        }
+        reject(new Error('Cache file not found after yt-dlp'));
+      }
+    });
   });
 }
 
@@ -137,7 +144,7 @@ app.get('/history', (req, res) => {
     if (fs.existsSync(HISTORY_FILE)) {
       const historyData = fs.readFileSync(HISTORY_FILE, 'utf8');
       if (!historyData) {
-        return res.json([]); // Empty file
+        return res.json([]);
       }
       const history = JSON.parse(historyData);
       res.json(history);
@@ -146,7 +153,7 @@ app.get('/history', (req, res) => {
     }
   } catch (error) {
     console.error('History parsing error:', error);
-    res.json([]); // Return empty array on error
+    res.json([]);
   }
 });
 
@@ -161,11 +168,11 @@ function updateHistory(videoId, title) {
     }
   } catch (error) {
     console.error('History update parsing error:', error);
-    history = []; // Reset to empty array if corrupted
+    history = [];
   }
   const newEntry = { videoId, title, timestamp: new Date().toISOString() };
   history.unshift(newEntry);
-  if (history.length > 5) history.pop();
+  if (history.length > 10) history.pop(); // Limit to 10 songs
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 }
 
