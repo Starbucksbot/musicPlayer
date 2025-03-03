@@ -298,6 +298,12 @@ function updateHistory(videoId, title, cacheFile) {
     history = [];
   }
 
+  // Check for existing entry and remove it
+  const existingIndex = history.findIndex(item => item.videoId === videoId);
+  if (existingIndex !== -1) {
+    history.splice(existingIndex, 1);
+  }
+
   const newEntry = { videoId, title, timestamp: new Date().toISOString(), cacheFile };
   history.unshift(newEntry);
 
