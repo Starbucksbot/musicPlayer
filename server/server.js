@@ -1,187 +1,136 @@
 const express = require('express');
-const fs = require('fs').promises;
+const { google } = require('googleapis');
+const ytdl = require('ytdl-core');
+const fs = require('fs');
 const path = require('path');
-const fetch = require('node-fetch');
-const { exec } = require('child_process');
-const util = require('util');
 
-const execPromise = util.promisify(exec);
 const app = express();
-const port = 4200;
-const historyFile = path.join(__dirname, '..', 'data', 'history.json');
-const queueFile = path.join(__dirname, '..', 'data', 'queue.json');
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'your-key-here';
+const PORT = 4200;
+const API_KEY = process.env.API_KEY; // Retrieve API key from environment
+const youtube = google.youtube({ version: 'v3', auth: API_KEY });
+const CACHE_DIR = path.join(__dirname, 'cache');
+const HISTORY_FILE = path.join(__dirname, 'history.json');
 
-let playerState = { currentVideoId: null, isPlaying: false, queue: [] };
-let quotaExceeded = false;
-let lastQuotaErrorTime = null;
-const QUOTA_WAIT_TIME = 2 * 60 * 60 * 1000;
-const cache = new Map();
-
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
-
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  if (quotaExceeded && lastQuotaErrorTime && Date.now() - lastQuotaErrorTime > QUOTA_WAIT_TIME) {
-    quotaExceeded = false;
-    lastQuotaErrorTime = null;
-  }
-  next();
-});
-
-async function getHistory() {
-  try {
-    const data = await fs.readFile(historyFile, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    return { pinned: [], recent: [] };
-  }
+// Ensure cache directory exists
+if (!fs.existsSync(CACHE_DIR)) {
+  fs.mkdirSync(CACHE_DIR);
 }
 
-async function saveHistory(history) {
-  await fs.mkdir(path.dirname(historyFile), { recursive: true });
-  await fs.writeFile(historyFile, JSON.stringify(history, null, 2));
-}
+// Serve static files from 'public'
+app.use(express.static('public'));
 
-async function getQueue() {
+// Search endpoint
+app.get('/search', async (req, res) => {
+  const query = req.query.q;
   try {
-    const data = await fs.readFile(queueFile, 'utf8');
-    return JSON.parse(data);
-  } catch {
-    return [];
-  }
-}
-
-async function saveQueue(queue) {
-  await fs.mkdir(path.dirname(queueFile), { recursive: true });
-  await fs.writeFile(queueFile, JSON.stringify(queue, null, 2));
-}
-
-(async () => {
-  playerState.queue = await getQueue();
-})();
-
-app.get('/api/history', async (req, res) => res.json(await getHistory()));
-
-app.post('/api/play', async (req, res) => {
-  const { videoId, title } = req.body;
-  playerState.currentVideoId = videoId;
-  playerState.isPlaying = true;
-  const history = await getHistory();
-  if (!history.recent.some(item => item.id === videoId)) {
-    history.recent.unshift({ id: videoId, title });
-    history.recent = history.recent.slice(0, 30);
-  }
-  await saveHistory(history);
-  res.json({ message: 'Playing' });
-});
-
-app.post('/api/pause', (req, res) => {
-  playerState.isPlaying = false;
-  res.json({ message: 'Paused' });
-});
-
-app.post('/api/resume', (req, res) => {
-  playerState.isPlaying = true;
-  res.json({ message: 'Resumed' });
-});
-
-app.post('/api/clear-queue', async (req, res) => {
-  playerState.queue = [];
-  await saveQueue(playerState.queue);
-  res.json({ message: 'Queue cleared' });
-});
-
-app.post('/api/add-to-queue', async (req, res) => {
-  const { videoId, title } = req.body;
-  if (playerState.queue.length < 10) {
-    playerState.queue.push({ id: videoId, title });
-    await saveQueue(playerState.queue);
-    res.json({ message: 'Added to queue' });
-  } else {
-    res.status(400).json({ error: 'Queue full (max 10)' });
-  }
-});
-
-app.post('/api/next', async (req, res) => {
-  const nextItem = playerState.queue.shift();
-  await saveQueue(playerState.queue);
-  if (nextItem) {
-    playerState.currentVideoId = nextItem.id;
-    playerState.isPlaying = true;
-  } else {
-    playerState.currentVideoId = null;
-    playerState.isPlaying = false;
-  }
-  res.json({ message: 'Moved to next' });
-});
-
-app.get('/api/search', async (req, res) => {
-  const { q } = req.query;
-  if (!q) return res.status(400).json({ error: 'Query required' });
-  const cacheKey = `search:${q}`;
-  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
-  try {
-    const results = quotaExceeded
-      ? await searchWithYtDlp(q)
-      : await searchWithYouTubeAPI(q);
-    cache.set(cacheKey, results);
-    setTimeout(() => cache.delete(cacheKey), 10 * 60 * 1000);
-    res.json(results);
-  } catch (err) {
-    console.error(`Search error: ${err.message}`);
-    res.status(500).json({ error: 'Search failed', details: err.message });
-  }
-});
-
-app.get('/api/audio', async (req, res) => {
-  const { videoId } = req.query;
-  if (!videoId) return res.status(400).json({ error: 'videoId required' });
-  console.log(`Loading audio for videoId: ${videoId}`);
-  try {
-    const { stdout } = await execPromise(
-      `yt-dlp -f bestaudio --no-playlist --buffer-size 16k "https://www.youtube.com/watch?v=${videoId}" --get-url`
-    );
-    res.redirect(stdout.trim());
-  } catch (err) {
-    console.error(`Audio load error for ${videoId}: ${err.message}`);
-    res.status(500).json({ error: 'Audio streaming failed', details: err.message });
-  }
-});
-
-app.get('/api/state', (req, res) => res.json(playerState));
-
-async function searchWithYtDlp(query) {
-  const { stdout } = await execPromise(
-    `yt-dlp "ytsearch5:${query}" --dump-json --flat-playlist --no-playlist`
-  );
-  return stdout.trim().split('\n').map(line => {
-    const item = JSON.parse(line);
-    return { id: { videoId: item.id }, snippet: { title: item.title } };
-  });
-}
-
-async function searchWithYouTubeAPI(query) {
-  try {
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=5&key=${YOUTUBE_API_KEY}`
-    );
-    const data = await response.json();
-    if (!response.ok || data.error) {
-      console.error(`YouTube API error: ${data.error?.message || response.statusText}`);
-      if (data.error?.code === 403) {
-        quotaExceeded = true;
-        lastQuotaErrorTime = Date.now();
-        return await searchWithYtDlp(query);
-      }
-      throw new Error(data.error?.message || 'API request failed');
+    const searchRes = await youtube.search.list({
+      part: 'snippet',
+      q: query,
+      type: 'video',
+      maxResults: 10,
+    });
+    const items = searchRes.data.items.map(item => ({
+      videoId: item.id.videoId,
+      title: item.snippet.title,
+      thumbnail: item.snippet.thumbnails.default.url,
+    }));
+    res.json(items);
+  } catch (error) {
+    if (error.code === 403) { // Quota exceeded
+      res.status(429).json({ error: 'API quota exceeded. Try again later.' });
+    } else {
+      console.error(error);
+      res.status(500).json({ error: 'Failed to search' });
     }
-    return data.items || [];
-  } catch (err) {
-    console.error(`YouTube API fetch error: ${err.message}`);
-    throw err;
   }
+});
+
+// Stream endpoint
+app.get('/stream/:videoId', (req, res) => {
+  const videoId = req.params.videoId;
+  const title = decodeURIComponent(req.query.title || 'Unknown');
+  const cacheFile = path.join(CACHE_DIR, `${videoId}.mp3`);
+
+  if (fs.existsSync(cacheFile)) {
+    // Serve cached file with range support
+    const stat = fs.statSync(cacheFile);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+      const file = fs.createReadStream(cacheFile, { start, end });
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': 'audio/mpeg',
+      };
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': 'audio/mpeg',
+        'Accept-Ranges': 'bytes',
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(cacheFile).pipe(res);
+    }
+  } else {
+    // Stream from ytdl-core and cache
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
+    const cacheStream = fs.createWriteStream(`${cacheFile}.part`);
+
+    // Set headers (basic streaming, no range support for simplicity)
+    res.setHeader('Content-Type', 'audio/mpeg');
+    stream.pipe(res);
+    stream.pipe(cacheStream);
+
+    stream.on('end', () => {
+      fs.rename(`${cacheFile}.part`, cacheFile, err => {
+        if (err) console.error('Error renaming cache file:', err);
+      });
+    });
+
+    stream.on('error', (err) => {
+      console.error('Streaming error:', err);
+      if (!res.headersSent) {
+        res.status(500).send('Failed to stream audio');
+      }
+    });
+  }
+
+  // Update history
+  updateHistory(videoId, title);
+});
+
+// History endpoint
+app.get('/history', (req, res) => {
+  if (fs.existsSync(HISTORY_FILE)) {
+    const history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    res.json(history);
+  } else {
+    res.json([]);
+  }
+});
+
+// Update history function
+function updateHistory(videoId, title) {
+  let history = [];
+  if (fs.existsSync(HISTORY_FILE)) {
+    history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+  }
+  const newEntry = { videoId, title, timestamp: new Date().toISOString() };
+  history.unshift(newEntry);
+  if (history.length > 5) history.pop();
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 }
 
-app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});

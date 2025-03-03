@@ -1,19 +1,14 @@
 {
-  "name": "music-player",
+  "name": "youtube-audio-streamer",
   "version": "1.0.0",
+  "main": "server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "build:css": "npx tailwindcss -i ./styles/tailwind.css -o ./public/styles.css",
-    "build:css:watch": "npx tailwindcss -i ./styles/tailwind.css -o ./public/styles.css --watch"
+    "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "node-fetch": "^2.6.7",
+    "express": "^4.17.1",
+    "googleapis": "^105.0.0",
+    "ytdl-core": "^4.11.0",
     "pm2": "^5.2.0"
-  },
-  "devDependencies": {
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.31",
-    "autoprefixer": "^10.4.16"
   }
 }
