@@ -13,6 +13,7 @@ const loadingBar = document.getElementById('loading-bar');
 const loadingProgress = document.querySelector('.loading-progress');
 const loadingPercent = document.getElementById('loading-percent');
 const currentTrack = document.getElementById('current-track');
+const clearSearch = document.getElementById('clear-search');
 
 let debounceTimer;
 let sleepTimer = null;
@@ -24,15 +25,24 @@ function triggerSearch() {
     const query = searchInput.value.trim();
     if (query) {
       fetchSearchResults(query);
+      clearSearch.style.display = 'block';
     } else {
       searchResults.innerHTML = '';
       searchResults.style.display = 'none';
+      clearSearch.style.display = 'none';
     }
   }, 300);
 }
 
 searchInput.addEventListener('input', triggerSearch);
 searchButton.addEventListener('click', triggerSearch);
+
+clearSearch.addEventListener('click', () => {
+  searchInput.value = '';
+  searchResults.innerHTML = '';
+  searchResults.style.display = 'none';
+  clearSearch.style.display = 'none';
+});
 
 async function fetchSearchResults(query) {
   try {
@@ -155,10 +165,6 @@ async function playNextInQueue() {
   }
 }
 
-function preloadQueue(queue) {
-  // Preloading is now handled server-side
-}
-
 function updateQueueDisplay(queue) {
   queueList.innerHTML = '';
   queue.forEach((item, index) => {
@@ -169,15 +175,27 @@ function updateQueueDisplay(queue) {
     }
     queueItem.innerHTML = `
       <p>${index + 1}. ${item.title}</p>
+      <button class="remove-btn">Remove</button>
     `;
-    queueItem.addEventListener('click', async () => {
-      playSong(item.videoId, item.title, true);
-      await fetch('/queue/remove-first', {
+    queueItem.querySelector('.remove-btn').addEventListener('click', async () => {
+      await fetch('/queue/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index }),
       });
       const updatedQueue = await (await fetch('/queue')).json();
       updateQueueDisplay(updatedQueue);
+    });
+    queueItem.addEventListener('click', async (e) => {
+      if (!e.target.classList.contains('remove-btn')) {
+        playSong(item.videoId, item.title, true);
+        await fetch('/queue/remove-first', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const updatedQueue = await (await fetch('/queue')).json();
+        updateQueueDisplay(updatedQueue);
+      }
     });
     queueList.appendChild(queueItem);
   });
@@ -257,10 +275,13 @@ function startSleepTimer(milliseconds) {
       fetch('/queue/clear', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-      }).then(() => updateQueueDisplay([]));
-      sleepTimerDisplay.textContent = '';
-      sleepTimer = null;
-      currentTrack.textContent = 'Currently Playing: Nothing';
+      }).then(() => {
+        updateQueueDisplay([]);
+        sleepTimerDisplay.textContent = '';
+        sleepTimer = null;
+        currentTrack.textContent = 'Currently Playing: Nothing';
+        window.location.reload(); // Force page refresh
+      });
     } else {
       sleepTimerDisplay.textContent = formatTime(timeLeft);
     }

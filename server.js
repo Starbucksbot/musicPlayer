@@ -19,7 +19,6 @@ if (!fs.existsSync(CACHE_DIR)) {
 app.use(express.static('public'));
 app.use(express.json());
 
-// Search endpoint with hybrid approach
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   try {
@@ -60,7 +59,6 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// Stream endpoint with yt-dlp
 app.get('/stream/:videoId', (req, res) => {
   const videoId = req.params.videoId;
   const title = decodeURIComponent(req.query.title || 'Unknown');
@@ -110,7 +108,6 @@ app.get('/stream/:videoId', (req, res) => {
   }
 });
 
-// Queue endpoints
 app.get('/queue', (req, res) => {
   try {
     if (fs.existsSync(QUEUE_FILE)) {
@@ -152,7 +149,6 @@ app.post('/queue/add', (req, res) => {
   }
   fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
   
-  // Predownload top 3 songs
   predownloadQueue(queue);
   
   res.json(queue);
@@ -170,7 +166,29 @@ app.post('/queue/remove-first', (req, res) => {
     if (queue.length > 0) {
       queue.shift();
       fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
-      predownloadQueue(queue); // Update predownloaded files
+      predownloadQueue(queue);
+    }
+    res.json(queue);
+  } catch (error) {
+    console.error('Queue remove error:', error);
+    res.status(500).json({ error: 'Failed to remove from queue' });
+  }
+});
+
+app.post('/queue/remove', (req, res) => {
+  const { index } = req.body;
+  let queue = [];
+  try {
+    if (fs.existsSync(QUEUE_FILE)) {
+      const queueData = fs.readFileSync(QUEUE_FILE, 'utf8');
+      if (queueData) {
+        queue = JSON.parse(queueData);
+      }
+    }
+    if (index >= 0 && index < queue.length) {
+      queue.splice(index, 1);
+      fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+      predownloadQueue(queue);
     }
     res.json(queue);
   } catch (error) {

@@ -4,8 +4,8 @@ body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
-  background-color: #1a1a1a; /* Dark mode fallback */
-  color: #fff; /* Dark mode text */
+  background-color: #1a1a1a;
+  color: #fff;
 }
 
 .container {
@@ -33,7 +33,7 @@ body {
   font-size: 16px;
   text-align: center;
   margin-bottom: 10px;
-  user-select: none; /* Prevent clicking/selecting */
+  user-select: none;
 }
 
 #audio-player {
@@ -60,7 +60,7 @@ body {
   left: 0;
   height: 100%;
   width: 0%;
-  background: rgba(0, 128, 0, 0.5); /* Green fill for loading */
+  background: rgba(0, 128, 0, 0.5);
   transition: width 0.1s linear;
 }
 
@@ -80,9 +80,15 @@ body {
   gap: 10px;
 }
 
-#search-input {
+.search-input-wrapper {
+  position: relative;
   flex: 1;
+}
+
+#search-input {
+  width: 100%;
   padding: 15px;
+  padding-right: 30px; /* Space for clear button */
   border: none;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.1);
@@ -94,6 +100,21 @@ body {
 
 #search-input::placeholder {
   color: rgba(255, 255, 255, 0.7);
+}
+
+.clear-search {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: none; /* Hidden by default */
+}
+
+.clear-search:hover {
+  color: #fff;
 }
 
 #search-button {
@@ -185,7 +206,7 @@ body {
 }
 
 .queue-btn, .play-next-btn {
-  padding: 10px 10px; /* Taller buttons for touchscreen */
+  padding: 10px 10px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 5px;
   background: transparent;
@@ -276,6 +297,9 @@ body {
   padding: 10px;
   cursor: pointer;
   transition: background 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .history-item:hover, .queue-item:hover {
@@ -283,7 +307,39 @@ body {
 }
 
 .queue-item.not-preloaded {
-  opacity: 0.6; /* Dimmer text for non-preloaded items */
+  opacity: 0.6;
+}
+
+.queue-item .remove-btn {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.queue-item .remove-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 255, 128, 0.5); /* #00ff80 fill */
+  transition: all 0.3s ease;
+}
+
+.queue-item .remove-btn:hover::before {
+  left: 0;
+}
+
+.queue-item .remove-btn:hover {
+  color: #fff;
 }
 
 .sleep-option {
