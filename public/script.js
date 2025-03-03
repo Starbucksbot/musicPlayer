@@ -5,6 +5,7 @@ const audioPlayer = document.getElementById('audio-player');
 const recentlyPlayedBtn = document.getElementById('recently-played-btn');
 const queueBtn = document.getElementById('queue-btn');
 const sleepBtn = document.getElementById('sleep-btn');
+const clientSideBtn = document.getElementById('client-side-btn');
 const recentlyPlayedList = document.getElementById('recently-played-list');
 const queueList = document.getElementById('queue-list');
 const sleepOptions = document.getElementById('sleep-options');
@@ -18,6 +19,7 @@ const clearSearch = document.getElementById('clear-search');
 let debounceTimer;
 let sleepTimer = null;
 let loadingInterval = null;
+let isClientSide = false;
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -85,51 +87,59 @@ function displaySearchResults(results) {
 }
 
 function playSong(videoId, title, updateHistory = false) {
-  const encodedTitle = encodeURIComponent(title);
-  const streamUrl = `/stream/${videoId}?title=${encodedTitle}&updateHistory=${updateHistory}`;
-  audioPlayer.src = streamUrl;
-  audioPlayer.load();
+  if (isClientSide) {
+    const encodedTitle = encodeURIComponent(title);
+    const streamUrl = `/stream/${videoId}?title=${encodedTitle}&updateHistory=${updateHistory}`;
+    audioPlayer.src = streamUrl;
+    audioPlayer.load();
 
-  currentTrack.textContent = `Currently Playing: ${title}`;
+    currentTrack.textContent = `Currently Playing: ${title}`;
 
-  loadingBar.style.display = 'block';
-  let progress = 0;
-  loadingProgress.style.width = '0%';
-  loadingPercent.textContent = '0%';
+    loadingBar.style.display = 'block';
+    let progress = 0;
+    loadingProgress.style.width = '0%';
+    loadingPercent.textContent = '0%';
 
-  if (loadingInterval) clearInterval(loadingInterval);
-  loadingInterval = setInterval(() => {
-    progress += 2;
-    if (progress >= 100) {
-      progress = 100;
+    if (loadingInterval) clearInterval(loadingInterval);
+    loadingInterval = setInterval(() => {
+      progress += 2;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(loadingInterval);
+      }
+      loadingProgress.style.width = `${progress}%`;
+      loadingPercent.textContent = `${progress}%`;
+    }, 100);
+
+    audioPlayer.addEventListener('canplay', () => {
       clearInterval(loadingInterval);
-    }
-    loadingProgress.style.width = `${progress}%`;
-    loadingPercent.textContent = `${progress}%`;
-  }, 100);
+      loadingProgress.style.width = '100%';
+      loadingPercent.textContent = '100%';
+      setTimeout(() => {
+        loadingBar.style.display = 'none';
+      }, 500);
+      audioPlayer.play().catch(err => {
+        console.error('Playback error:', err);
+        alert('Failed to play audio. The video might be unavailable or restricted.');
+      });
+    }, { once: true });
 
-  audioPlayer.addEventListener('canplay', () => {
-    clearInterval(loadingInterval);
-    loadingProgress.style.width = '100%';
-    loadingPercent.textContent = '100%';
-    setTimeout(() => {
+    audioPlayer.addEventListener('error', () => {
+      clearInterval(loadingInterval);
       loadingBar.style.display = 'none';
-    }, 500);
-    audioPlayer.play().catch(err => {
-      console.error('Playback error:', err);
-      alert('Failed to play audio. The video might be unavailable or restricted.');
+      currentTrack.textContent = 'Currently Playing: Nothing';
+      alert('Failed to load audio stream.');
+    }, { once: true });
+
+    audioPlayer.addEventListener('ended', playNextInQueue, { once: true });
+    if (updateHistory) fetchHistory();
+  } else {
+    fetch('/play', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId, title }),
     });
-  }, { once: true });
-
-  audioPlayer.addEventListener('error', () => {
-    clearInterval(loadingInterval);
-    loadingBar.style.display = 'none';
-    currentTrack.textContent = 'Currently Playing: Nothing';
-    alert('Failed to load audio stream.');
-  }, { once: true });
-
-  audioPlayer.addEventListener('ended', playNextInQueue, { once: true });
-  if (updateHistory) fetchHistory();
+  }
 }
 
 async function addToQueue(videoId, title, playNext = false) {
@@ -140,28 +150,30 @@ async function addToQueue(videoId, title, playNext = false) {
       body: JSON.stringify({ videoId, title, playNext }),
     });
     const queue = await response.json();
-    updateQueueDisplay(queue);
+    if (isClientSide) updateQueueDisplay(queue);
   } catch (error) {
     console.error('Error adding to queue:', error);
   }
 }
 
 async function playNextInQueue() {
-  try {
-    const response = await fetch('/queue/remove-first', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const queue = await response.json();
-    if (queue.length > 0) {
-      const nextSong = queue[0];
-      playSong(nextSong.videoId, nextSong.title, false);
-      updateQueueDisplay(queue);
-    } else {
-      currentTrack.textContent = 'Currently Playing: Nothing';
+  if (isClientSide) {
+    try {
+      const response = await fetch('/queue/remove-first', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const queue = await response.json();
+      if (queue.length > 0) {
+        const nextSong = queue[0];
+        playSong(nextSong.videoId, nextSong.title, false);
+        updateQueueDisplay(queue);
+      } else {
+        currentTrack.textContent = 'Currently Playing: Nothing';
+      }
+    } catch (error) {
+      console.error('Error playing next in queue:', error);
     }
-  } catch (error) {
-    console.error('Error playing next in queue:', error);
   }
 }
 
@@ -183,18 +195,22 @@ function updateQueueDisplay(queue) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ index }),
       });
-      const updatedQueue = await (await fetch('/queue')).json();
-      updateQueueDisplay(updatedQueue);
+      if (isClientSide) {
+        const updatedQueue = await (await fetch('/queue')).json();
+        updateQueueDisplay(updatedQueue);
+      }
     });
     queueItem.addEventListener('click', async (e) => {
       if (!e.target.classList.contains('remove-btn')) {
         playSong(item.videoId, item.title, true);
-        await fetch('/queue/remove-first', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const updatedQueue = await (await fetch('/queue')).json();
-        updateQueueDisplay(updatedQueue);
+        if (isClientSide) {
+          await fetch('/queue/remove-first', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const updatedQueue = await (await fetch('/queue')).json();
+          updateQueueDisplay(updatedQueue);
+        }
       }
     });
     queueList.appendChild(queueItem);
@@ -253,6 +269,16 @@ sleepBtn.addEventListener('click', () => {
   }
 });
 
+clientSideBtn.addEventListener('click', () => {
+  isClientSide = !isClientSide;
+  clientSideBtn.textContent = isClientSide ? 'Server Side' : 'Client Side';
+  if (!isClientSide) {
+    audioPlayer.pause();
+    audioPlayer.src = '';
+    fetch('/events'); // Reconnect to server events
+  }
+});
+
 function populateSleepOptions() {
   for (let i = 1; i <= 10; i++) {
     const option = document.createElement('div');
@@ -280,7 +306,7 @@ function startSleepTimer(milliseconds) {
         sleepTimerDisplay.textContent = '';
         sleepTimer = null;
         currentTrack.textContent = 'Currently Playing: Nothing';
-        window.location.reload(); // Force page refresh
+        window.location.reload();
       });
     } else {
       sleepTimerDisplay.textContent = formatTime(timeLeft);
@@ -294,6 +320,29 @@ function formatTime(milliseconds) {
   const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
   return `${hours}h ${minutes}m ${seconds}s`;
 }
+
+// Real-time updates via SSE
+const eventSource = new EventSource('/events');
+eventSource.onmessage = (event) => {
+  if (!isClientSide) {
+    const { currentSong, queue } = JSON.parse(event.data);
+    if (currentSong) {
+      const encodedTitle = encodeURIComponent(currentSong.title);
+      const streamUrl = `/stream/${currentSong.videoId}?title=${encodedTitle}&updateHistory=false`;
+      if (audioPlayer.src !== streamUrl) {
+        audioPlayer.src = streamUrl;
+        audioPlayer.load();
+        audioPlayer.play().catch(err => console.error('Playback error:', err));
+        currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
+      }
+    } else {
+      audioPlayer.pause();
+      audioPlayer.src = '';
+      currentTrack.textContent = 'Currently Playing: Nothing';
+    }
+    updateQueueDisplay(queue);
+  }
+};
 
 fetchHistory();
 fetch('/queue').then(res => res.json()).then(queue => updateQueueDisplay(queue));

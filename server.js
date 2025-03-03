@@ -19,6 +19,10 @@ if (!fs.existsSync(CACHE_DIR)) {
 app.use(express.static('public'));
 app.use(express.json());
 
+// Server-side player state
+let currentSong = null;
+let clients = [];
+
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   try {
@@ -108,6 +112,28 @@ app.get('/stream/:videoId', (req, res) => {
   }
 });
 
+// SSE for real-time updates
+app.get('/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  clients.push(res);
+
+  const sendUpdate = () => {
+    const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
+    const data = JSON.stringify({ currentSong, queue });
+    res.write(`data: ${data}\n\n`);
+  };
+
+  sendUpdate();
+
+  req.on('close', () => {
+    clients = clients.filter(client => client !== res);
+  });
+});
+
 app.get('/queue', (req, res) => {
   try {
     if (fs.existsSync(QUEUE_FILE)) {
@@ -150,6 +176,7 @@ app.post('/queue/add', (req, res) => {
   fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
   
   predownloadQueue(queue);
+  broadcastUpdate();
   
   res.json(queue);
 });
@@ -164,9 +191,13 @@ app.post('/queue/remove-first', (req, res) => {
       }
     }
     if (queue.length > 0) {
-      queue.shift();
+      const nextSong = queue.shift();
+      currentSong = nextSong;
       fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
       predownloadQueue(queue);
+      broadcastUpdate();
+    } else {
+      currentSong = null;
     }
     res.json(queue);
   } catch (error) {
@@ -189,6 +220,7 @@ app.post('/queue/remove', (req, res) => {
       queue.splice(index, 1);
       fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
       predownloadQueue(queue);
+      broadcastUpdate();
     }
     res.json(queue);
   } catch (error) {
@@ -199,7 +231,17 @@ app.post('/queue/remove', (req, res) => {
 
 app.post('/queue/clear', (req, res) => {
   fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
+  currentSong = null;
+  broadcastUpdate();
   res.json([]);
+});
+
+app.post('/play', (req, res) => {
+  const { videoId, title } = req.body;
+  currentSong = { videoId, title, cacheFile: path.join(CACHE_DIR, `${videoId}.mp3`) };
+  broadcastUpdate();
+  updateHistory(videoId, title, currentSong.cacheFile);
+  res.json({ success: true });
 });
 
 function predownloadQueue(queue) {
@@ -298,7 +340,6 @@ function updateHistory(videoId, title, cacheFile) {
     history = [];
   }
 
-  // Check for existing entry and remove it
   const existingIndex = history.findIndex(item => item.videoId === videoId);
   if (existingIndex !== -1) {
     history.splice(existingIndex, 1);
@@ -318,6 +359,12 @@ function updateHistory(videoId, title, cacheFile) {
   }
 
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+}
+
+function broadcastUpdate() {
+  const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
+  const data = JSON.stringify({ currentSong, queue });
+  clients.forEach(client => client.write(`data: ${data}\n\n`));
 }
 
 app.listen(PORT, () => {
