@@ -4,17 +4,17 @@ let sleepTimerId = null, sleepEndTime = null;
 document.addEventListener('DOMContentLoaded', () => {
   audioPlayer = document.getElementById('audioPlayer');
   syncWithServer();
-  setInterval(syncWithServer, 10000); // Poll every 10 seconds
+  setInterval(syncWithServer, 10000);
 
   audioPlayer.addEventListener('timeupdate', updateProgress);
   audioPlayer.addEventListener('play', () => {
     isPlaying = true;
-    document.querySelector('.play-button').textContent = 'Pause';
+    document.getElementById('playButton').textContent = 'Pause';
     fetch('/api/resume', { method: 'POST' });
   });
   audioPlayer.addEventListener('pause', () => {
     isPlaying = false;
-    document.querySelector('.play-button').textContent = 'Play';
+    document.getElementById('playButton').textContent = 'Play';
     fetch('/api/pause', { method: 'POST' });
   });
 
@@ -30,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('nextButton').addEventListener('click', () => fetch('/api/next', { method: 'POST' }).then(syncWithServer));
   document.getElementById('clearQueueButton').addEventListener('click', () => fetch('/api/clear-queue', { method: 'POST' }).then(fetchQueue));
-
   document.getElementById('sleepButton').addEventListener('click', toggleSleepMenu);
 
   const searchInput = document.getElementById('searchInput');
@@ -54,6 +53,7 @@ async function syncWithServer() {
     audioPlayer.src = `/api/audio?videoId=${currentVideoId}`;
     document.getElementById('albumArt').src = `https://img.youtube.com/vi/${currentVideoId}/hqdefault.jpg`;
     document.getElementById('albumArt').style.display = 'block';
+    document.getElementById('searchResults').style.display = 'none';
     isPlaying ? audioPlayer.play() : audioPlayer.pause();
   } else {
     document.getElementById('albumArt').style.display = 'none';
@@ -65,21 +65,22 @@ async function syncWithServer() {
 async function search(query) {
   if (!query) return;
   document.getElementById('searchLoading').style.display = 'block';
+  document.getElementById('searchSuggestions').style.display = 'none';
   const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
   const results = await response.json();
   document.getElementById('searchLoading').style.display = 'none';
-  const suggestions = document.getElementById('searchSuggestions');
-  suggestions.style.display = 'block';
-  suggestions.innerHTML = results.map(song => `
-    <div>
+  const searchResults = document.getElementById('searchResults');
+  searchResults.style.display = 'flex';
+  searchResults.innerHTML = results.slice(0, 5).map(song => `
+    <div class="result-item glass">
       <span onclick="playAudio('${song.id.videoId}', '${song.snippet.title}')">${song.snippet.title}</span>
-      <button class="suggestion-queue-button" onclick="addToQueue('${song.id.videoId}', '${song.snippet.title}')">Queue</button>
+      <button class="button queue-button" onclick="addToQueue('${song.id.videoId}', '${song.snippet.title}')">Queue</button>
     </div>
   `).join('');
 }
 
 function stopSearch() {
-  document.getElementById('searchSuggestions').style.display = 'none';
+  document.getElementById('searchResults').style.display = 'none';
   document.getElementById('searchLoading').style.display = 'none';
 }
 
@@ -107,7 +108,7 @@ async function fetchHistory() {
   const response = await fetch('/api/history');
   history = await response.json();
   document.getElementById('historyList').innerHTML = [...history.pinned, ...history.recent].map(item => `
-    <div>
+    <div class="history-item">
       <span onclick="playAudio('${item.id}', '${item.title}')">${item.title}</span>
     </div>
   `).join('');
@@ -115,7 +116,7 @@ async function fetchHistory() {
 
 async function fetchQueue() {
   document.getElementById('queueList').innerHTML = queue.map((item, i) => `
-    <div onclick="playAudio('${item.id}', '${item.title}')">${i + 1}: ${item.title}</div>
+    <div class="queue-item" onclick="playAudio('${item.id}', '${item.title}')">${i + 1}: ${item.title}</div>
   `).join('');
 }
 
@@ -141,7 +142,7 @@ function toggleSleepMenu() {
   } else {
     queuePanel.classList.add('sleep-menu');
     document.getElementById('queueList').innerHTML = [1, 2, 3, 4, 5, 6, 12].map(hour => `
-      <div onclick="setSleepTimer(${hour})">${hour} Hour${hour !== 1 ? 's' : ''}</div>
+      <div class="sleep-option" onclick="setSleepTimer(${hour})">${hour} Hour${hour !== 1 ? 's' : ''}</div>
     `).join('');
   }
 }

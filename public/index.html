@@ -9,7 +9,7 @@
 <body>
   <div class="overlay"></div>
   <div class="container">
-    <div class="search-bar">
+    <header class="search-bar glass">
       <div class="search-wrapper">
         <input type="text" id="searchInput" placeholder="Search YouTube music...">
         <button id="searchButton" class="button">Search</button>
@@ -18,23 +18,23 @@
         <span id="sleepCountdown" class="countdown"></span>
         <div id="searchLoading" class="search-loading" style="display: none;"></div>
       </div>
-      <div id="searchSuggestions" class="suggestions glass"></div>
-    </div>
-    <div class="panels">
-      <div class="panel glass" id="historyPanel">
+      <div id="searchSuggestions" class="suggestions glass" style="display: none;"></div>
+    </header>
+    <main class="panels">
+      <section class="panel glass" id="historyPanel">
         <h2>History</h2>
         <div id="historyList"></div>
-      </div>
-      <div class="panel glass middle-panel" id="middlePanel">
+      </section>
+      <section class="panel glass middle-panel" id="middlePanel">
         <div id="playerContent">
-          <div id="albumArtContainer">
+          <div id="mediaContainer">
             <img id="albumArt" alt="Album Art" style="display: none;">
             <div id="searchResults" class="search-results"></div>
           </div>
           <div class="controls-container">
             <div class="controls">
               <button class="button control-button" id="prevButton">Prev</button>
-              <button class="button play-button" id="playButton">Play/Pause</button>
+              <button class="button play-button" id="playButton">Play</button>
               <button class="button control-button" id="nextButton">Next</button>
             </div>
             <div class="progress-container">
@@ -44,13 +44,13 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="panel glass" id="queuePanel">
+      </section>
+      <section class="panel glass" id="queuePanel">
         <h2 id="queueTitle">Queue</h2>
         <button id="clearQueueButton" class="button">Clear Queue</button>
         <div id="queueList"></div>
-      </div>
-    </div>
+      </section>
+    </main>
   </div>
   <audio id="audioPlayer" style="display: none;"></audio>
   <script src="script.js"></script>
