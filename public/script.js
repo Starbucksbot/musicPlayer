@@ -19,7 +19,7 @@ const clearSearch = document.getElementById('clear-search');
 let debounceTimer;
 let loadingInterval = null;
 let isClientSide = false;
-let lastPlayedSongId = null; // Track the last played song to prevent re-sync
+let lastPlayedSongId = null;
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -292,6 +292,7 @@ clientSideBtn.addEventListener('click', (e) => {
   if (!isClientSide) {
     audioPlayer.pause();
     audioPlayer.src = '';
+    syncAndPlayCurrentSong(); // Sync on mode switch to server-side
   }
 });
 
@@ -346,6 +347,35 @@ function formatTime(milliseconds) {
   return `${hours}h ${minutes}m ${seconds}s`;
 }
 
+async function syncAndPlayCurrentSong() {
+  try {
+    const response = await fetch('/current-state');
+    const { currentSong, elapsedTime, queue, sleepTimer } = await response.json();
+    if (currentSong) {
+      const encodedTitle = encodeURIComponent(currentSong.title);
+      const streamUrl = `/stream/${currentSong.videoId}?title=${encodedTitle}&updateHistory=false`;
+      audioPlayer.src = streamUrl;
+      audioPlayer.load();
+      audioPlayer.addEventListener('canplay', () => {
+        audioPlayer.currentTime = elapsedTime; // Sync time once on load
+        audioPlayer.play().catch(err => console.error('Playback error:', err));
+        currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
+        lastPlayedSongId = currentSong.videoId;
+      }, { once: true });
+    } else {
+      currentTrack.textContent = 'Currently Playing: Nothing';
+    }
+    updateQueueDisplay(queue);
+    if (sleepTimer) {
+      sleepTimerDisplay.textContent = formatTime(sleepTimer);
+    } else {
+      sleepTimerDisplay.textContent = '';
+    }
+  } catch (error) {
+    console.error('Error syncing current song:', error);
+  }
+}
+
 // Real-time updates via SSE
 const eventSource = new EventSource('/events');
 eventSource.onmessage = (event) => {
@@ -358,7 +388,7 @@ eventSource.onmessage = (event) => {
       audioPlayer.load();
       audioPlayer.play().catch(err => console.error('Playback error:', err));
       currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
-      lastPlayedSongId = currentSong.videoId; // Update last played song
+      lastPlayedSongId = currentSong.videoId;
     } else if (!currentSong) {
       audioPlayer.pause();
       audioPlayer.src = '';
@@ -382,6 +412,11 @@ audioPlayer.addEventListener('ended', () => {
     });
   }
 });
+
+// Sync and play on page load in server-side mode
+if (!isClientSide) {
+  syncAndPlayCurrentSong();
+}
 
 fetchHistory();
 fetch('/queue').then(res => res.json()).then(queue => updateQueueDisplay(queue));

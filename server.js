@@ -21,6 +21,7 @@ app.use(express.json());
 
 // Server-side state
 let currentSong = null;
+let songStartTime = null; // Timestamp when the current song started
 let clients = [];
 let sleepTimer = null;
 let sleepTimeout = null;
@@ -137,6 +138,15 @@ app.get('/events', (req, res) => {
   });
 });
 
+app.get('/current-state', (req, res) => {
+  const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
+  let elapsedTime = 0;
+  if (currentSong && songStartTime) {
+    elapsedTime = Math.floor((Date.now() - songStartTime) / 1000); // Seconds since song started
+  }
+  res.json({ currentSong, elapsedTime, queue, sleepTimer });
+});
+
 app.get('/queue', (req, res) => {
   try {
     if (fs.existsSync(QUEUE_FILE)) {
@@ -196,11 +206,13 @@ function playNextInQueue() {
     if (queue.length > 0) {
       const nextSong = queue.shift();
       currentSong = nextSong;
+      songStartTime = Date.now(); // Set start time for new song
       fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
       predownloadQueue(queue);
       broadcastUpdate();
     } else {
       currentSong = null;
+      songStartTime = null;
       broadcastUpdate();
     }
   } catch (error) {
@@ -240,6 +252,7 @@ app.post('/queue/remove', (req, res) => {
 app.post('/queue/clear', (req, res) => {
   fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
   currentSong = null;
+  songStartTime = null;
   if (sleepTimeout) {
     clearTimeout(sleepTimeout);
     sleepTimer = null;
@@ -251,6 +264,7 @@ app.post('/queue/clear', (req, res) => {
 app.post('/play', (req, res) => {
   const { videoId, title } = req.body;
   currentSong = { videoId, title, cacheFile: path.join(CACHE_DIR, `${videoId}.mp3`) };
+  songStartTime = Date.now(); // Set start time for new song
   broadcastUpdate();
   updateHistory(videoId, title, currentSong.cacheFile);
   res.json({ success: true });
@@ -267,6 +281,7 @@ app.post('/sleep', (req, res) => {
   sleepTimer = milliseconds;
   sleepTimeout = setTimeout(() => {
     currentSong = null;
+    songStartTime = null;
     fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
     sleepTimer = null;
     sleepTimeout = null;
