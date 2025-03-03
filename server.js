@@ -79,7 +79,7 @@ app.get('/stream/:videoId', async (req, res) => {
     }
   }
 
-  updateHistory(videoId, title);
+  updateHistory(videoId, title, cacheFile);
 });
 
 function fallbackToYtdlp(url, cacheFile, req, res) {
@@ -157,7 +157,7 @@ app.get('/history', (req, res) => {
   }
 });
 
-function updateHistory(videoId, title) {
+function updateHistory(videoId, title, cacheFile) {
   let history = [];
   try {
     if (fs.existsSync(HISTORY_FILE)) {
@@ -170,9 +170,22 @@ function updateHistory(videoId, title) {
     console.error('History update parsing error:', error);
     history = [];
   }
-  const newEntry = { videoId, title, timestamp: new Date().toISOString() };
+
+  // Add new entry
+  const newEntry = { videoId, title, timestamp: new Date().toISOString(), cacheFile };
   history.unshift(newEntry);
-  if (history.length > 10) history.pop(); // Limit to 10 songs
+
+  // Remove oldest entry and its cache file if exceeding 10
+  if (history.length > 10) {
+    const removedEntry = history.pop();
+    if (removedEntry.cacheFile && fs.existsSync(removedEntry.cacheFile)) {
+      fs.unlink(removedEntry.cacheFile, (err) => {
+        if (err) console.error(`Error deleting cache file ${removedEntry.cacheFile}:`, err);
+        else console.log(`Deleted cache file: ${removedEntry.cacheFile}`);
+      });
+    }
+  }
+
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
 }
 
