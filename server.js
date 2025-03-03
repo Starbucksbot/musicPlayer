@@ -1,6 +1,7 @@
 const express = require('express');
 const { google } = require('googleapis');
 const ytdl = require('ytdl-core');
+const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -42,42 +43,18 @@ app.get('/search', async (req, res) => {
   }
 });
 
-app.get('/stream/:videoId', (req, res) => {
+app.get('/stream/:videoId', async (req, res) => {
   const videoId = req.params.videoId;
   const title = decodeURIComponent(req.query.title || 'Unknown');
   const cacheFile = path.join(CACHE_DIR, `${videoId}.mp3`);
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
 
   if (fs.existsSync(cacheFile)) {
-    const stat = fs.statSync(cacheFile);
-    const fileSize = stat.size;
-    const range = req.headers.range;
-
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = (end - start) + 1;
-      const file = fs.createReadStream(cacheFile, { start, end });
-      const head = {
-        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunksize,
-        'Content-Type': 'audio/mpeg',
-      };
-      res.writeHead(206, head);
-      file.pipe(res);
-    } else {
-      const head = {
-        'Content-Length': fileSize,
-        'Content-Type': 'audio/mpeg',
-        'Accept-Ranges': 'bytes',
-      };
-      res.writeHead(200, head);
-      fs.createReadStream(cacheFile).pipe(res);
-    }
+    serveCachedFile(cacheFile, req, res);
   } else {
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    // Try ytdl-core first
     try {
+      const info = await ytdl.getInfo(url);
       const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
       const cacheStream = fs.createWriteStream(`${cacheFile}.part`);
 
@@ -91,20 +68,68 @@ app.get('/stream/:videoId', (req, res) => {
         });
       });
 
-      stream.on('error', (err) => {
-        console.error('Streaming error:', err);
+      stream.on('error', async (err) => {
+        console.error('ytdl-core error:', err);
         if (!res.headersSent) {
-          res.status(500).send('Failed to stream audio. Video might be unavailable.');
+          await fallbackToYtdlp(url, cacheFile, res);
         }
       });
     } catch (err) {
-      console.error('Stream initialization error:', err);
-      res.status(500).send('Error initializing stream');
+      console.error('ytdl-core initialization error:', err);
+      await fallbackToYtdlp(url, cacheFile, res);
     }
   }
 
   updateHistory(videoId, title);
 });
+
+async function fallbackToYtdlp(url, cacheFile, res) {
+  const command = `yt-dlp -x --audio-format mp3 -o "${cacheFile}" "${url}"`;
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error('yt-dlp error:', error, stderr);
+      if (!res.headersSent) {
+        res.status(500).send('Failed to stream audio with yt-dlp');
+      }
+      return;
+    }
+    if (fs.existsSync(cacheFile)) {
+      serveCachedFile(cacheFile, null, res);
+    } else {
+      res.status(500).send('Failed to cache audio with yt-dlp');
+    }
+  });
+}
+
+function serveCachedFile(cacheFile, req, res) {
+  const stat = fs.statSync(cacheFile);
+  const fileSize = stat.size;
+  const range = req ? req.headers.range : null;
+
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunksize = (end - start) + 1;
+    const file = fs.createReadStream(cacheFile, { start, end });
+    const head = {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': 'audio/mpeg',
+    };
+    res.writeHead(206, head);
+    file.pipe(res);
+  } else {
+    const head = {
+      'Content-Length': fileSize,
+      'Content-Type': 'audio/mpeg',
+      'Accept-Ranges': 'bytes',
+    };
+    res.writeHead(200, head);
+    fs.createReadStream(cacheFile).pipe(res);
+  }
+}
 
 app.get('/history', (req, res) => {
   if (fs.existsSync(HISTORY_FILE)) {

@@ -57,9 +57,13 @@ function displaySearchResults(results) {
 
 function playSong(videoId, title) {
   const encodedTitle = encodeURIComponent(title);
-  audioPlayer.src = `/stream/${videoId}?title=${encodedTitle}`;
-  audioPlayer.play().catch(err => console.error('Playback error:', err));
-  fetchHistory();
+  const streamUrl = `/stream/${videoId}?title=${encodedTitle}`;
+  audioPlayer.src = streamUrl;
+  audioPlayer.load(); // Force reload to handle new source
+  audioPlayer.play().catch(err => {
+    console.error('Playback error:', err);
+    alert('Failed to play audio. The video might be unavailable or restricted.');
+  });
 }
 
 async function fetchHistory() {
