@@ -4,292 +4,8 @@ body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
-  background-color: #1a1a1a;
-  color: #fff;
-}
-
-.container {
-  max-width: 800px;
-  margin: 50px auto;
-  padding: 20px;
-}
-
-.audio-container {
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 10px;
-  border-radius: 5px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  margin-bottom: 20px;
-  backdrop-filter: blur(5px);
-}
-
-#audio-player {
-  width: 100%;
-  border-radius: 0;
-}
-
-.loading-bar {
-  position: relative;
-  width: 100%;
-  height: 30px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  margin-top: 10px;
-  overflow: hidden;
-  display: none;
-}
-
-.loading-progress {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 0%;
-  background: rgba(0, 128, 0, 0.5);
-  transition: width 0.1s linear;
-}
-
-#loading-percent {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #fff;
-  font-size: 16px;
-  z-index: 1;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  gap: 10px;
-}
-
-#search-input {
-  flex: 1;
-  padding: 15px;
-  border: none;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  color: #fff;
-  font-size: 16px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-#search-input::placeholder {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-#search-button {
-  padding: 15px 25px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  background: transparent;
-  color: #fff;
-  font-size: 16px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-#search-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
-}
-
-#search-button:hover::before {
-  left: 0;
-}
-
-#search-button:hover {
-  color: #000;
-}
-
-.dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  width: 100%;
-  max-height: 300px;
-  overflow-y: auto;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-  z-index: 1000;
-  display: none;
-  margin-top: 10px;
-  backdrop-filter: blur(10px);
-}
-
-.dropdown::-webkit-scrollbar {
-  width: 8px;
-}
-
-.dropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.dropdown::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 4px;
-}
-
-.dropdown::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.result-item {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-.result-item:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.result-item img {
-  margin-right: 10px;
-  border-radius: 5px;
-}
-
-.result-item-buttons {
-  margin-left: auto;
-  display: flex;
-  gap: 5px;
-}
-
-.queue-btn, .play-next-btn {
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 5px;
-  background: transparent;
-  color: #fff;
-  font-size: 12px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.queue-btn::before, .play-next-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: rgba(128, 0, 128, 0.5);
-  transition: all 0.3s ease;
-}
-
-.queue-btn:hover::before, .play-next-btn:hover::before {
-  left: 0;
-}
-
-.queue-btn:hover, .play-next-btn:hover {
-  color: #fff;
-}
-
-#control-panel {
-  margin-top: 30px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.control-btn {
-  padding: 10px 20px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  background: transparent;
-  color: #fff;
-  font-size: 16px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-
-.control-btn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: rgba(128, 0, 128, 0.5);
-  transition: all 0.3s ease;
-}
-
-.control-btn:hover::before,
-.control-btn.active::before {
-  left: 0;
-}
-
-.control-btn:hover,
-.control-btn.active {
-  color: #fff;
-}
-
-.control-dropdown {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-  padding: 10px;
-  margin-top: 10px;
-  backdrop-filter: blur(10px);
-  display: none;
-}
-
-.control-dropdown.active {
-  display: block;
-}
-
-.history-item, .queue-item {
-  padding: 10px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-.history-item:hover, .queue-item:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.queue-item.not-preloaded {
-  opacity: 0.6; /* Dimmer text for non-preloaded items */
-}
-
-.sleep-option {
-  padding: 10px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-.sleep-option:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-body {
-  background: url('/background.jpg') no-repeat center center fixed;
-  background-size: cover;
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
-  background-color: #1a1a1a;
-  color: #fff;
+  background-color: #1a1a1a; /* Dark mode fallback */
+  color: #fff; /* Dark mode text */
 }
 
 .container {
@@ -344,7 +60,7 @@ body {
   left: 0;
   height: 100%;
   width: 0%;
-  background: rgba(0, 128, 0, 0.5);
+  background: rgba(0, 128, 0, 0.5); /* Green fill for loading */
   transition: width 0.1s linear;
 }
 
@@ -469,7 +185,7 @@ body {
 }
 
 .queue-btn, .play-next-btn {
-  padding: 5px 10px;
+  padding: 10px 10px; /* Taller buttons for touchscreen */
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 5px;
   background: transparent;
@@ -488,7 +204,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: rgba(128, 0, 128, 0.5);
+  background: rgba(0, 255, 128, 0.5); /* #00ff80 fill */
   transition: all 0.3s ease;
 }
 
@@ -527,7 +243,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: rgba(128, 0, 128, 0.5);
+  background: rgba(0, 255, 128, 0.5); /* #00ff80 fill */
   transition: all 0.3s ease;
 }
 
@@ -567,7 +283,7 @@ body {
 }
 
 .queue-item.not-preloaded {
-  opacity: 0.6;
+  opacity: 0.6; /* Dimmer text for non-preloaded items */
 }
 
 .sleep-option {

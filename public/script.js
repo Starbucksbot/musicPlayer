@@ -17,7 +17,6 @@ const currentTrack = document.getElementById('current-track');
 let debounceTimer;
 let sleepTimer = null;
 let loadingInterval = null;
-let queue = [];
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -39,14 +38,13 @@ async function fetchSearchResults(query) {
   try {
     const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
     const data = await response.json();
-    if (response.status === 429) {
-      alert(data.error);
-      searchResults.style.display = 'none';
-    } else {
-      displaySearchResults(data);
+    if (!response.ok) {
+      throw new Error(data.error || 'Search failed');
     }
+    displaySearchResults(data);
   } catch (error) {
     console.error('Error fetching search results:', error);
+    alert('Search failed');
   }
 }
 
@@ -63,8 +61,8 @@ function displaySearchResults(results) {
         <button class="play-next-btn">Play Next</button>
       </div>
     `;
-    item.querySelector('.queue-btn').addEventListener('click', () => addToQueue(result.videoId, result.title));
-    item.querySelector('.play-next-btn').addEventListener('click', () => addToQueueNext(result.videoId, result.title));
+    item.querySelector('.queue-btn').addEventListener('click', () => addToQueue(result.videoId, result.title, false));
+    item.querySelector('.play-next-btn').addEventListener('click', () => addToQueue(result.videoId, result.title, true));
     item.addEventListener('click', (e) => {
       if (!e.target.classList.contains('queue-btn') && !e.target.classList.contains('play-next-btn')) {
         playSong(result.videoId, result.title, true);
@@ -82,7 +80,6 @@ function playSong(videoId, title, updateHistory = false) {
   audioPlayer.src = streamUrl;
   audioPlayer.load();
 
-  // Update current track display
   currentTrack.textContent = `Currently Playing: ${title}`;
 
   loadingBar.style.display = 'block';
@@ -125,38 +122,44 @@ function playSong(videoId, title, updateHistory = false) {
   if (updateHistory) fetchHistory();
 }
 
-function addToQueue(videoId, title) {
-  queue.push({ videoId, title });
-  updateQueueDisplay();
-  preloadQueue();
-}
-
-function addToQueueNext(videoId, title) {
-  queue.unshift({ videoId, title });
-  updateQueueDisplay();
-  preloadQueue();
-}
-
-function playNextInQueue() {
-  if (queue.length > 0) {
-    const nextSong = queue.shift();
-    playSong(nextSong.videoId, nextSong.title, false);
-    updateQueueDisplay();
-    preloadQueue();
-  } else {
-    currentTrack.textContent = 'Currently Playing: Nothing';
+async function addToQueue(videoId, title, playNext = false) {
+  try {
+    const response = await fetch('/queue/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId, title, playNext }),
+    });
+    const queue = await response.json();
+    updateQueueDisplay(queue);
+  } catch (error) {
+    console.error('Error adding to queue:', error);
   }
 }
 
-function preloadQueue() {
-  for (let i = 0; i < Math.min(3, queue.length); i++) {
-    const { videoId, title } = queue[i];
-    const streamUrl = `/stream/${encodeURIComponent(videoId)}?title=${encodeURIComponent(title)}&updateHistory=false`;
-    fetch(streamUrl, { method: 'HEAD' });
+async function playNextInQueue() {
+  try {
+    const response = await fetch('/queue/remove-first', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const queue = await response.json();
+    if (queue.length > 0) {
+      const nextSong = queue[0];
+      playSong(nextSong.videoId, nextSong.title, false);
+      updateQueueDisplay(queue);
+    } else {
+      currentTrack.textContent = 'Currently Playing: Nothing';
+    }
+  } catch (error) {
+    console.error('Error playing next in queue:', error);
   }
 }
 
-function updateQueueDisplay() {
+function preloadQueue(queue) {
+  // Preloading is now handled server-side
+}
+
+function updateQueueDisplay(queue) {
   queueList.innerHTML = '';
   queue.forEach((item, index) => {
     const queueItem = document.createElement('div');
@@ -167,10 +170,14 @@ function updateQueueDisplay() {
     queueItem.innerHTML = `
       <p>${index + 1}. ${item.title}</p>
     `;
-    queueItem.addEventListener('click', () => {
+    queueItem.addEventListener('click', async () => {
       playSong(item.videoId, item.title, true);
-      queue.splice(0, index + 1);
-      updateQueueDisplay();
+      await fetch('/queue/remove-first', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const updatedQueue = await (await fetch('/queue')).json();
+      updateQueueDisplay(updatedQueue);
     });
     queueList.appendChild(queueItem);
   });
@@ -216,7 +223,9 @@ recentlyPlayedBtn.addEventListener('click', () => {
 
 queueBtn.addEventListener('click', () => {
   toggleDropdown(queueBtn, queueList);
-  updateQueueDisplay();
+  fetch('/queue')
+    .then(res => res.json())
+    .then(queue => updateQueueDisplay(queue));
 });
 
 sleepBtn.addEventListener('click', () => {
@@ -245,8 +254,10 @@ function startSleepTimer(milliseconds) {
     if (timeLeft <= 0) {
       clearInterval(sleepTimer);
       audioPlayer.pause();
-      queue = [];
-      updateQueueDisplay();
+      fetch('/queue/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).then(() => updateQueueDisplay([]));
       sleepTimerDisplay.textContent = '';
       sleepTimer = null;
       currentTrack.textContent = 'Currently Playing: Nothing';
@@ -264,3 +275,4 @@ function formatTime(milliseconds) {
 }
 
 fetchHistory();
+fetch('/queue').then(res => res.json()).then(queue => updateQueueDisplay(queue));

@@ -1,7 +1,6 @@
 const express = require('express');
 const { google } = require('googleapis');
-const ytdl = require('ytdl-core');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -11,13 +10,16 @@ const API_KEY = process.env.API_KEY;
 const youtube = google.youtube({ version: 'v3', auth: API_KEY });
 const CACHE_DIR = path.join(__dirname, 'cache');
 const HISTORY_FILE = path.join(__dirname, 'history.json');
+const QUEUE_FILE = path.join(__dirname, 'queue.json');
 
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR);
 }
 
 app.use(express.static('public'));
+app.use(express.json());
 
+// Search endpoint with hybrid approach
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   try {
@@ -25,7 +27,7 @@ app.get('/search', async (req, res) => {
       part: 'snippet',
       q: query,
       type: 'video',
-      maxResults: 10,
+      maxResults: 5,
     });
     const items = searchRes.data.items.map(item => ({
       videoId: item.id.videoId,
@@ -34,8 +36,23 @@ app.get('/search', async (req, res) => {
     }));
     res.json(items);
   } catch (error) {
-    if (error.code === 403) {
-      res.status(429).json({ error: 'API quota exceeded. Try again later.' });
+    if (error.code === 403 || error.code === 429) {
+      console.log('API rate limit hit, falling back to yt-dlp');
+      exec(`yt-dlp "ytsearch5:${query}" --dump-json --flat-playlist --no-download`, (err, stdout, stderr) => {
+        if (err) {
+          console.error('yt-dlp search error:', err, stderr);
+          return res.status(500).json({ error: 'Search failed with yt-dlp' });
+        }
+        const results = stdout.split('\n')
+          .filter(line => line.trim())
+          .map(line => JSON.parse(line))
+          .map(item => ({
+            videoId: item.id,
+            title: item.title,
+            thumbnail: item.thumbnails?.[0]?.url || '',
+          }));
+        res.json(results.slice(0, 5));
+      });
     } else {
       console.error('Search error:', error);
       res.status(500).json({ error: 'Failed to search' });
@@ -43,7 +60,8 @@ app.get('/search', async (req, res) => {
   }
 });
 
-app.get('/stream/:videoId', async (req, res) => {
+// Stream endpoint with yt-dlp
+app.get('/stream/:videoId', (req, res) => {
   const videoId = req.params.videoId;
   const title = decodeURIComponent(req.query.title || 'Unknown');
   const cacheFile = path.join(CACHE_DIR, `${videoId}.mp3`);
@@ -52,65 +70,152 @@ app.get('/stream/:videoId', async (req, res) => {
   if (fs.existsSync(cacheFile)) {
     serveCachedFile(cacheFile, req, res);
   } else {
-    try {
-      const info = await ytdl.getInfo(url);
-      const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
-      const cacheStream = fs.createWriteStream(`${cacheFile}.part`);
+    const ytdlp = spawn('yt-dlp', [
+      url,
+      '-f', 'bestaudio',
+      '-o', '-',
+      '--no-part',
+      '--no-playlist',
+      '--extract-audio',
+      '--audio-format', 'mp3',
+    ]);
 
-      res.setHeader('Content-Type', 'audio/mpeg');
-      stream.pipe(res);
-      stream.pipe(cacheStream);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    ytdlp.stdout.pipe(res);
 
-      stream.on('end', () => {
-        fs.rename(`${cacheFile}.part`, cacheFile, err => {
-          if (err) console.error('Error renaming cache file:', err);
-        });
-      });
+    ytdlp.stderr.on('data', (data) => {
+      console.error('yt-dlp stderr:', data.toString());
+    });
 
-      stream.on('error', async (err) => {
-        console.error('ytdl-core streaming error:', err);
-        if (!res.headersSent) {
-          await fallbackToYtdlp(url, cacheFile, req, res);
-        }
-      });
-    } catch (err) {
-      console.error('ytdl-core initialization error:', err);
-      await fallbackToYtdlp(url, cacheFile, req, res);
-    }
+    ytdlp.on('error', (err) => {
+      console.error('yt-dlp spawn error:', err);
+      if (!res.headersSent) {
+        res.status(500).send('Failed to stream audio with yt-dlp');
+      }
+    });
+
+    ytdlp.on('close', (code) => {
+      if (code !== 0 && !res.headersSent) {
+        res.status(500).send('yt-dlp exited with error');
+      }
+    });
+
+    const cacheStream = fs.createWriteStream(cacheFile);
+    ytdlp.stdout.pipe(cacheStream);
   }
 
-  // Only update history if explicitly requested via query param
   const updateHistoryFlag = req.query.updateHistory === 'true';
   if (updateHistoryFlag) {
     updateHistory(videoId, title, cacheFile);
   }
 });
 
-function fallbackToYtdlp(url, cacheFile, req, res) {
-  return new Promise((resolve, reject) => {
-    const command = `yt-dlp -x --audio-format mp3 -o "${cacheFile}" "${url}"`;
-    exec(command, (error, stdout, stderr) => {
-      console.log('yt-dlp stdout:', stdout);
-      console.error('yt-dlp stderr:', stderr);
-      if (error) {
-        console.error('yt-dlp error:', error);
-        if (!res.headersSent) {
-          res.status(500).send('Failed to stream audio with yt-dlp');
-        }
-        reject(error);
-        return;
+// Queue endpoints
+app.get('/queue', (req, res) => {
+  try {
+    if (fs.existsSync(QUEUE_FILE)) {
+      const queueData = fs.readFileSync(QUEUE_FILE, 'utf8');
+      if (!queueData) {
+        return res.json([]);
       }
-      if (fs.existsSync(cacheFile)) {
-        serveCachedFile(cacheFile, req, res);
-        resolve();
-      } else {
-        if (!res.headersSent) {
-          res.status(500).send('Failed to cache audio with yt-dlp');
-        }
-        reject(new Error('Cache file not found after yt-dlp'));
+      const queue = JSON.parse(queueData);
+      res.json(queue);
+    } else {
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('Queue parsing error:', error);
+    res.json([]);
+  }
+});
+
+app.post('/queue/add', (req, res) => {
+  const { videoId, title, playNext = false } = req.body;
+  let queue = [];
+  try {
+    if (fs.existsSync(QUEUE_FILE)) {
+      const queueData = fs.readFileSync(QUEUE_FILE, 'utf8');
+      if (queueData) {
+        queue = JSON.parse(queueData);
       }
-    });
-  });
+    }
+  } catch (error) {
+    console.error('Queue read error:', error);
+    queue = [];
+  }
+
+  const newEntry = { videoId, title, cacheFile: path.join(CACHE_DIR, `${videoId}.mp3`) };
+  if (playNext) {
+    queue.unshift(newEntry);
+  } else {
+    queue.push(newEntry);
+  }
+  fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+  
+  // Predownload top 3 songs
+  predownloadQueue(queue);
+  
+  res.json(queue);
+});
+
+app.post('/queue/remove-first', (req, res) => {
+  let queue = [];
+  try {
+    if (fs.existsSync(QUEUE_FILE)) {
+      const queueData = fs.readFileSync(QUEUE_FILE, 'utf8');
+      if (queueData) {
+        queue = JSON.parse(queueData);
+      }
+    }
+    if (queue.length > 0) {
+      queue.shift();
+      fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+      predownloadQueue(queue); // Update predownloaded files
+    }
+    res.json(queue);
+  } catch (error) {
+    console.error('Queue remove error:', error);
+    res.status(500).json({ error: 'Failed to remove from queue' });
+  }
+});
+
+app.post('/queue/clear', (req, res) => {
+  fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
+  res.json([]);
+});
+
+function predownloadQueue(queue) {
+  for (let i = 0; i < Math.min(3, queue.length); i++) {
+    const { videoId, title, cacheFile } = queue[i];
+    if (!fs.existsSync(cacheFile)) {
+      const url = `https://www.youtube.com/watch?v=${videoId}`;
+      const ytdlp = spawn('yt-dlp', [
+        url,
+        '-f', 'bestaudio',
+        '-o', cacheFile,
+        '--no-part',
+        '--no-playlist',
+        '--extract-audio',
+        '--audio-format', 'mp3',
+      ]);
+
+      ytdlp.stderr.on('data', (data) => {
+        console.error(`yt-dlp predownload stderr for ${videoId}:`, data.toString());
+      });
+
+      ytdlp.on('error', (err) => {
+        console.error(`yt-dlp predownload error for ${videoId}:`, err);
+      });
+
+      ytdlp.on('close', (code) => {
+        if (code === 0) {
+          console.log(`Predownloaded ${title} to ${cacheFile}`);
+        } else {
+          console.error(`yt-dlp predownload failed for ${videoId} with code ${code}`);
+        }
+      });
+    }
+  }
 }
 
 function serveCachedFile(cacheFile, req, res) {
