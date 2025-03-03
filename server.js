@@ -131,9 +131,9 @@ app.get('/events', (req, res) => {
 
   sendUpdate();
   const interval = setInterval(() => {
-    if (currentSong) currentTime += 1; // Increment time every second
+    if (currentSong) currentTime += 5; // Increment time every 5 seconds
     sendUpdate();
-  }, 1000);
+  }, 5000); // Update every 5 seconds to reduce frequency
 
   req.on('close', () => {
     clearInterval(interval);
@@ -200,7 +200,7 @@ app.post('/queue/remove-first', (req, res) => {
     if (queue.length > 0) {
       const nextSong = queue.shift();
       currentSong = nextSong;
-      currentTime = 0; // Reset time for new song
+      currentTime = 0;
       fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
       predownloadQueue(queue);
       broadcastUpdate();

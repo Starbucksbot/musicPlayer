@@ -37,7 +37,7 @@ function triggerSearch() {
 
 searchInput.addEventListener('input', triggerSearch);
 searchButton.addEventListener('click', (e) => {
-  e.preventDefault(); // Prevent form submission
+  e.preventDefault();
   triggerSearch();
 });
 
@@ -76,11 +76,11 @@ function displaySearchResults(results) {
       </div>
     `;
     item.querySelector('.queue-btn').addEventListener('click', (e) => {
-      e.preventDefault(); // Prevent any default behavior
+      e.preventDefault();
       addToQueue(result.videoId, result.title, false);
     });
     item.querySelector('.play-next-btn').addEventListener('click', (e) => {
-      e.preventDefault(); // Prevent any default behavior
+      e.preventDefault();
       addToQueue(result.videoId, result.title, true);
     });
     item.addEventListener('click', (e) => {
@@ -203,7 +203,7 @@ function updateQueueDisplay(queue) {
       <button class="remove-btn">Remove</button>
     `;
     queueItem.querySelector('.remove-btn').addEventListener('click', async (e) => {
-      e.preventDefault(); // Prevent any default behavior
+      e.preventDefault();
       await fetch('/queue/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,7 +277,7 @@ queueBtn.addEventListener('click', () => {
 });
 
 sleepBtn.addEventListener('click', (e) => {
-  e.preventDefault(); // Prevent default behavior
+  e.preventDefault();
   toggleDropdown(sleepBtn, sleepOptions);
   if (!sleepOptions.children.length) {
     populateSleepOptions();
@@ -285,7 +285,7 @@ sleepBtn.addEventListener('click', (e) => {
 });
 
 clientSideBtn.addEventListener('click', (e) => {
-  e.preventDefault(); // Prevent default behavior
+  e.preventDefault();
   isClientSide = !isClientSide;
   clientSideBtn.textContent = isClientSide ? 'Server Side' : 'Client Side';
   if (!isClientSide) {
@@ -300,7 +300,7 @@ function populateSleepOptions() {
     option.className = 'sleep-option';
     option.textContent = `${i} hour${i > 1 ? 's' : ''}`;
     option.addEventListener('click', (e) => {
-      e.preventDefault(); // Prevent default behavior
+      e.preventDefault();
       if (isClientSide) {
         startSleepTimer(i * 60 * 60 * 1000);
       } else {
@@ -359,7 +359,10 @@ eventSource.onmessage = (event) => {
         audioPlayer.play().catch(err => console.error('Playback error:', err));
         currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
       }
-      audioPlayer.currentTime = currentTime; // Sync playback position
+      const timeDifference = Math.abs(audioPlayer.currentTime - currentTime);
+      if (timeDifference > 5) { // Sync only if difference > 5 seconds
+        audioPlayer.currentTime = currentTime;
+      }
     } else {
       audioPlayer.pause();
       audioPlayer.src = '';
@@ -377,11 +380,14 @@ eventSource.onmessage = (event) => {
 // Sync time back to server periodically
 audioPlayer.addEventListener('timeupdate', () => {
   if (!isClientSide && currentSong) {
-    fetch('/sync-time', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ time: Math.floor(audioPlayer.currentTime) }),
-    });
+    const timeDifference = Math.abs(audioPlayer.currentTime - currentTime);
+    if (timeDifference > 5) { // Sync server only if significant difference
+      fetch('/sync-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ time: Math.floor(audioPlayer.currentTime) }),
+      });
+    }
   }
 });
 
