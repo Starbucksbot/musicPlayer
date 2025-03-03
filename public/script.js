@@ -9,9 +9,13 @@ const recentlyPlayedList = document.getElementById('recently-played-list');
 const queueList = document.getElementById('queue-list');
 const sleepOptions = document.getElementById('sleep-options');
 const sleepTimerDisplay = document.getElementById('sleep-timer');
+const loadingBar = document.getElementById('loading-bar');
+const loadingProgress = document.querySelector('.loading-progress');
+const loadingPercent = document.getElementById('loading-percent');
 
 let debounceTimer;
 let sleepTimer = null;
+let loadingInterval = null;
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -67,10 +71,43 @@ function playSong(videoId, title) {
   const streamUrl = `/stream/${videoId}?title=${encodedTitle}`;
   audioPlayer.src = streamUrl;
   audioPlayer.load();
-  audioPlayer.play().catch(err => {
-    console.error('Playback error:', err);
-    alert('Failed to play audio. The video might be unavailable or restricted.');
-  });
+
+  // Show loading bar and simulate progress
+  loadingBar.style.display = 'block';
+  let progress = 0;
+  loadingProgress.style.width = '0%';
+  loadingPercent.textContent = '0%';
+
+  if (loadingInterval) clearInterval(loadingInterval);
+  loadingInterval = setInterval(() => {
+    progress += 2; // Simulate progress (adjust speed as needed)
+    if (progress >= 100) {
+      progress = 100;
+      clearInterval(loadingInterval);
+    }
+    loadingProgress.style.width = `${progress}%`;
+    loadingPercent.textContent = `${progress}%`;
+  }, 100); // Update every 100ms
+
+  audioPlayer.addEventListener('canplay', () => {
+    clearInterval(loadingInterval);
+    loadingProgress.style.width = '100%';
+    loadingPercent.textContent = '100%';
+    setTimeout(() => {
+      loadingBar.style.display = 'none';
+    }, 500); // Hide after a short delay
+    audioPlayer.play().catch(err => {
+      console.error('Playback error:', err);
+      alert('Failed to play audio. The video might be unavailable or restricted.');
+    });
+  }, { once: true });
+
+  audioPlayer.addEventListener('error', () => {
+    clearInterval(loadingInterval);
+    loadingBar.style.display = 'none';
+    alert('Failed to load audio stream.');
+  }, { once: true });
+
   fetchHistory();
 }
 
