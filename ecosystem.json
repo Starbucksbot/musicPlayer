@@ -4,7 +4,8 @@
       "name": "youtube-audio-streamer",
       "script": "server.js",
       "env": {
-        "API_KEY": "YOUR_API_KEY_HERE"
+        "API_KEY": "YOUR_API_KEY_HERE",
+        "PORT": 4200
       }
     }
   ]
