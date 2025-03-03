@@ -19,9 +19,11 @@ if (!fs.existsSync(CACHE_DIR)) {
 app.use(express.static('public'));
 app.use(express.json());
 
-// Server-side player state
+// Server-side state
 let currentSong = null;
 let clients = [];
+let sleepTimer = null;
+let sleepTimeout = null;
 
 app.get('/search', async (req, res) => {
   const query = req.query.q;
@@ -112,7 +114,6 @@ app.get('/stream/:videoId', (req, res) => {
   }
 });
 
-// SSE for real-time updates
 app.get('/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -123,7 +124,7 @@ app.get('/events', (req, res) => {
 
   const sendUpdate = () => {
     const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
-    const data = JSON.stringify({ currentSong, queue });
+    const data = JSON.stringify({ currentSong, queue, sleepTimer });
     res.write(`data: ${data}\n\n`);
   };
 
@@ -198,6 +199,7 @@ app.post('/queue/remove-first', (req, res) => {
       broadcastUpdate();
     } else {
       currentSong = null;
+      broadcastUpdate();
     }
     res.json(queue);
   } catch (error) {
@@ -232,6 +234,10 @@ app.post('/queue/remove', (req, res) => {
 app.post('/queue/clear', (req, res) => {
   fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
   currentSong = null;
+  if (sleepTimeout) {
+    clearTimeout(sleepTimeout);
+    sleepTimer = null;
+  }
   broadcastUpdate();
   res.json([]);
 });
@@ -242,6 +248,44 @@ app.post('/play', (req, res) => {
   broadcastUpdate();
   updateHistory(videoId, title, currentSong.cacheFile);
   res.json({ success: true });
+});
+
+app.post('/song-ended', (req, res) => {
+  playNextInQueue();
+  res.json({ success: true });
+});
+
+app.post('/sleep', (req, res) => {
+  const { milliseconds } = req.body;
+  if (sleepTimeout) clearTimeout(sleepTimeout);
+  sleepTimer = milliseconds;
+  sleepTimeout = setTimeout(() => {
+    currentSong = null;
+    fs.writeFileSync(QUEUE_FILE, JSON.stringify([], null, 2));
+    sleepTimer = null;
+    sleepTimeout = null;
+    broadcastUpdate();
+  }, milliseconds);
+  broadcastUpdate();
+  res.json({ success: true });
+});
+
+app.get('/history', (req, res) => {
+  try {
+    if (fs.existsSync(HISTORY_FILE)) {
+      const historyData = fs.readFileSync(HISTORY_FILE, 'utf8');
+      if (!historyData) {
+        return res.json([]);
+      }
+      const history = JSON.parse(historyData);
+      res.json(history);
+    } else {
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('History parsing error:', error);
+    res.json([]);
+  }
 });
 
 function predownloadQueue(queue) {
@@ -308,24 +352,6 @@ function serveCachedFile(cacheFile, req, res) {
   }
 }
 
-app.get('/history', (req, res) => {
-  try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      const historyData = fs.readFileSync(HISTORY_FILE, 'utf8');
-      if (!historyData) {
-        return res.json([]);
-      }
-      const history = JSON.parse(historyData);
-      res.json(history);
-    } else {
-      res.json([]);
-    }
-  } catch (error) {
-    console.error('History parsing error:', error);
-    res.json([]);
-  }
-});
-
 function updateHistory(videoId, title, cacheFile) {
   let history = [];
   try {
@@ -363,7 +389,7 @@ function updateHistory(videoId, title, cacheFile) {
 
 function broadcastUpdate() {
   const queue = fs.existsSync(QUEUE_FILE) ? JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8')) : [];
-  const data = JSON.stringify({ currentSong, queue });
+  const data = JSON.stringify({ currentSong, queue, sleepTimer });
   clients.forEach(client => client.write(`data: ${data}\n\n`));
 }
 

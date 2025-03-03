@@ -17,7 +17,6 @@ const currentTrack = document.getElementById('current-track');
 const clearSearch = document.getElementById('clear-search');
 
 let debounceTimer;
-let sleepTimer = null;
 let loadingInterval = null;
 let isClientSide = false;
 
@@ -174,6 +173,11 @@ async function playNextInQueue() {
     } catch (error) {
       console.error('Error playing next in queue:', error);
     }
+  } else {
+    fetch('/song-ended', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
 
@@ -275,7 +279,6 @@ clientSideBtn.addEventListener('click', () => {
   if (!isClientSide) {
     audioPlayer.pause();
     audioPlayer.src = '';
-    fetch('/events'); // Reconnect to server events
   }
 });
 
@@ -284,19 +287,28 @@ function populateSleepOptions() {
     const option = document.createElement('div');
     option.className = 'sleep-option';
     option.textContent = `${i} hour${i > 1 ? 's' : ''}`;
-    option.addEventListener('click', () => startSleepTimer(i * 60 * 60 * 1000));
+    option.addEventListener('click', () => {
+      if (isClientSide) {
+        startSleepTimer(i * 60 * 60 * 1000);
+      } else {
+        fetch('/sleep', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ milliseconds: i * 60 * 60 * 1000 }),
+        });
+      }
+    });
     sleepOptions.appendChild(option);
   }
 }
 
 function startSleepTimer(milliseconds) {
-  if (sleepTimer) clearInterval(sleepTimer);
   let timeLeft = milliseconds;
   sleepTimerDisplay.textContent = formatTime(timeLeft);
-  sleepTimer = setInterval(() => {
+  const interval = setInterval(() => {
     timeLeft -= 1000;
     if (timeLeft <= 0) {
-      clearInterval(sleepTimer);
+      clearInterval(interval);
       audioPlayer.pause();
       fetch('/queue/clear', {
         method: 'POST',
@@ -304,7 +316,6 @@ function startSleepTimer(milliseconds) {
       }).then(() => {
         updateQueueDisplay([]);
         sleepTimerDisplay.textContent = '';
-        sleepTimer = null;
         currentTrack.textContent = 'Currently Playing: Nothing';
         window.location.reload();
       });
@@ -324,8 +335,8 @@ function formatTime(milliseconds) {
 // Real-time updates via SSE
 const eventSource = new EventSource('/events');
 eventSource.onmessage = (event) => {
+  const { currentSong, queue, sleepTimer } = JSON.parse(event.data);
   if (!isClientSide) {
-    const { currentSong, queue } = JSON.parse(event.data);
     if (currentSong) {
       const encodedTitle = encodeURIComponent(currentSong.title);
       const streamUrl = `/stream/${currentSong.videoId}?title=${encodedTitle}&updateHistory=false`;
@@ -341,8 +352,22 @@ eventSource.onmessage = (event) => {
       currentTrack.textContent = 'Currently Playing: Nothing';
     }
     updateQueueDisplay(queue);
+    if (sleepTimer) {
+      sleepTimerDisplay.textContent = formatTime(sleepTimer);
+    } else {
+      sleepTimerDisplay.textContent = '';
+    }
   }
 };
+
+audioPlayer.addEventListener('ended', () => {
+  if (!isClientSide) {
+    fetch('/song-ended', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+});
 
 fetchHistory();
 fetch('/queue').then(res => res.json()).then(queue => updateQueueDisplay(queue));
