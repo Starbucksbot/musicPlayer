@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = 4200;
 const API_KEY = process.env.API_KEY; // Retrieve API key from environment
 const youtube = google.youtube({ version: 'v3', auth: API_KEY });
 const CACHE_DIR = path.join(__dirname, 'cache');
