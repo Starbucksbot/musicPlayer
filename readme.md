@@ -34,12 +34,11 @@ A web-based audio streaming application that plays YouTube audio content with se
 3. **Install yt-dlp**:
       ```bash
     pip install yt-dlp
-4. **Set Up Environment**:
-    Fill in ecosystem.json file
-       ```bash
+4. **Set Up Environment**: Fill in ecosystem.json file
+     ```bash
     PORT=3000
     API_KEY=<your-youtube-api-key>
-    
+
 - Replace <your-youtube-api-key> with your YouTube Data API key (optional).
 
 ## Usage
