@@ -19,6 +19,7 @@ const clearSearch = document.getElementById('clear-search');
 let debounceTimer;
 let loadingInterval = null;
 let isClientSide = false;
+let lastPlayedSongId = null; // Track the last played song to prevent re-sync
 
 function triggerSearch() {
   clearTimeout(debounceTimer);
@@ -350,19 +351,19 @@ const eventSource = new EventSource('/events');
 eventSource.onmessage = (event) => {
   const { currentSong, queue, sleepTimer } = JSON.parse(event.data);
   if (!isClientSide) {
-    if (currentSong) {
+    if (currentSong && currentSong.videoId !== lastPlayedSongId) {
       const encodedTitle = encodeURIComponent(currentSong.title);
       const streamUrl = `/stream/${currentSong.videoId}?title=${encodedTitle}&updateHistory=false`;
-      if (audioPlayer.src !== streamUrl) {
-        audioPlayer.src = streamUrl;
-        audioPlayer.load();
-        audioPlayer.play().catch(err => console.error('Playback error:', err));
-        currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
-      }
-    } else {
+      audioPlayer.src = streamUrl;
+      audioPlayer.load();
+      audioPlayer.play().catch(err => console.error('Playback error:', err));
+      currentTrack.textContent = `Currently Playing: ${currentSong.title}`;
+      lastPlayedSongId = currentSong.videoId; // Update last played song
+    } else if (!currentSong) {
       audioPlayer.pause();
       audioPlayer.src = '';
       currentTrack.textContent = 'Currently Playing: Nothing';
+      lastPlayedSongId = null;
     }
     updateQueueDisplay(queue);
     if (sleepTimer) {
