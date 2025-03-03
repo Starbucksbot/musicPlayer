@@ -1,11 +1,12 @@
 const searchInput = document.getElementById('search-input');
+const searchButton = document.getElementById('search-button');
 const searchResults = document.getElementById('search-results');
 const audioPlayer = document.getElementById('audio-player');
 const historyList = document.getElementById('history-list');
 
 let debounceTimer;
 
-searchInput.addEventListener('input', () => {
+function triggerSearch() {
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     const query = searchInput.value.trim();
@@ -16,7 +17,10 @@ searchInput.addEventListener('input', () => {
       searchResults.style.display = 'none';
     }
   }, 300);
-});
+}
+
+searchInput.addEventListener('input', triggerSearch);
+searchButton.addEventListener('click', triggerSearch);
 
 async function fetchSearchResults(query) {
   try {
@@ -81,5 +85,4 @@ function displayHistory(history) {
   });
 }
 
-// Load history on page load
 fetchHistory();

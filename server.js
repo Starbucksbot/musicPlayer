@@ -6,20 +6,17 @@ const path = require('path');
 
 const app = express();
 const PORT = 4200;
-const API_KEY = process.env.API_KEY; // Retrieve API key from environment
+const API_KEY = process.env.API_KEY;
 const youtube = google.youtube({ version: 'v3', auth: API_KEY });
 const CACHE_DIR = path.join(__dirname, 'cache');
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 
-// Ensure cache directory exists
 if (!fs.existsSync(CACHE_DIR)) {
   fs.mkdirSync(CACHE_DIR);
 }
 
-// Serve static files from 'public'
 app.use(express.static('public'));
 
-// Search endpoint
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   try {
@@ -36,23 +33,21 @@ app.get('/search', async (req, res) => {
     }));
     res.json(items);
   } catch (error) {
-    if (error.code === 403) { // Quota exceeded
+    if (error.code === 403) {
       res.status(429).json({ error: 'API quota exceeded. Try again later.' });
     } else {
-      console.error(error);
+      console.error('Search error:', error);
       res.status(500).json({ error: 'Failed to search' });
     }
   }
 });
 
-// Stream endpoint
 app.get('/stream/:videoId', (req, res) => {
   const videoId = req.params.videoId;
   const title = decodeURIComponent(req.query.title || 'Unknown');
   const cacheFile = path.join(CACHE_DIR, `${videoId}.mp3`);
 
   if (fs.existsSync(cacheFile)) {
-    // Serve cached file with range support
     const stat = fs.statSync(cacheFile);
     const fileSize = stat.size;
     const range = req.headers.range;
@@ -81,35 +76,36 @@ app.get('/stream/:videoId', (req, res) => {
       fs.createReadStream(cacheFile).pipe(res);
     }
   } else {
-    // Stream from ytdl-core and cache
     const url = `https://www.youtube.com/watch?v=${videoId}`;
-    const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
-    const cacheStream = fs.createWriteStream(`${cacheFile}.part`);
+    try {
+      const stream = ytdl(url, { filter: 'audioonly', quality: 'highestaudio' });
+      const cacheStream = fs.createWriteStream(`${cacheFile}.part`);
 
-    // Set headers (basic streaming, no range support for simplicity)
-    res.setHeader('Content-Type', 'audio/mpeg');
-    stream.pipe(res);
-    stream.pipe(cacheStream);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      stream.pipe(res);
+      stream.pipe(cacheStream);
 
-    stream.on('end', () => {
-      fs.rename(`${cacheFile}.part`, cacheFile, err => {
-        if (err) console.error('Error renaming cache file:', err);
+      stream.on('end', () => {
+        fs.rename(`${cacheFile}.part`, cacheFile, err => {
+          if (err) console.error('Error renaming cache file:', err);
+        });
       });
-    });
 
-    stream.on('error', (err) => {
-      console.error('Streaming error:', err);
-      if (!res.headersSent) {
-        res.status(500).send('Failed to stream audio');
-      }
-    });
+      stream.on('error', (err) => {
+        console.error('Streaming error:', err);
+        if (!res.headersSent) {
+          res.status(500).send('Failed to stream audio. Video might be unavailable.');
+        }
+      });
+    } catch (err) {
+      console.error('Stream initialization error:', err);
+      res.status(500).send('Error initializing stream');
+    }
   }
 
-  // Update history
   updateHistory(videoId, title);
 });
 
-// History endpoint
 app.get('/history', (req, res) => {
   if (fs.existsSync(HISTORY_FILE)) {
     const history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
@@ -119,7 +115,6 @@ app.get('/history', (req, res) => {
   }
 });
 
-// Update history function
 function updateHistory(videoId, title) {
   let history = [];
   if (fs.existsSync(HISTORY_FILE)) {
